@@ -108,14 +108,21 @@
 
   <section id="install">
     <h2>Install</h2>
-    <p class="sub">Needs Python 3.9+ and (for the brain) <a href="https://ollama.com" target="_blank">Ollama</a>. Pick your OS:</p>
+    <p class="sub">Easiest: download the installer — no scripts. Just install <a href="https://ollama.com" target="_blank">Ollama</a> too (for the local brain).</p>
+    <p style="margin-bottom:22px">
+      <a class="btn" id="dlWin" href="#" target="_blank">⬇ Windows installer</a>
+      <a class="btn ghost" id="dlLinux" href="#" target="_blank">⬇ Linux build</a>
+      <a class="btn ghost" id="dlRel" href="#" target="_blank">All releases</a>
+    </p>
+    <p class="sub">Or install from source (any OS, needs Python 3.9+):</p>
     <div class="tabs" id="ostabs">
       <div class="tab on" data-os="win">Windows</div>
       <div class="tab" data-os="mac">macOS</div>
       <div class="tab" data-os="linux">Linux</div>
     </div>
     <pre><button class="copy">copy</button><code id="installcode"></code></pre>
-    <p class="auth">First run downloads a small brain model into RAM (once), then it's fast. Add <code>--voice</code> to set up offline speech.</p>
+    <p class="auth">On a Linux server it runs CLI-only; on a desktop you get the GUI + CLI.
+       Curious how the brain is trained? See <a id="trainDoc" href="#" target="_blank">TRAINING.md</a>.</p>
   </section>
 
   <section id="sync">
@@ -194,6 +201,10 @@
   document.getElementById('f1').href=MAIN_REPO;
   document.getElementById('f2').href=SKILLS_REPO;
   document.getElementById('skillsRepo').href=SKILLS_REPO;
+  document.getElementById('dlWin').href=MAIN_REPO+"/releases/latest/download/VirtualBuddy-Setup.exe";
+  document.getElementById('dlLinux').href=MAIN_REPO+"/releases/latest/download/VirtualBuddy-linux.tar.gz";
+  document.getElementById('dlRel').href=MAIN_REPO+"/releases";
+  document.getElementById('trainDoc').href=MAIN_REPO+"/blob/main/TRAINING.md";
 
   // ---- character swap ----
   const chars=["robot","crab","duck","elf"]; let ci=0;

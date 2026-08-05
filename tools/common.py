@@ -13,13 +13,18 @@ FAIL_PATH = os.path.join(DATA, "failures.jsonl")
 SCORE_PATH = os.path.join(DATA, "score.json")
 os.makedirs(DATA, exist_ok=True)
 
-_enc = None
-def encoder():
-    global _enc
-    if _enc is None:
-        from sentence_transformers import SentenceTransformer
-        _enc = SentenceTransformer("all-MiniLM-L6-v2")
-    return _enc
+_cfg = None
+def cfg():
+    global _cfg
+    if _cfg is None:
+        from buddy.settings import load
+        _cfg = load()
+    return _cfg
+
+def embed(texts):
+    """Same embedder the runtime brain uses, so training + inference match."""
+    from buddy import embedder
+    return embedder.embed(texts, cfg())
 
 def skill_phrases():
     """dict skill_name -> [base phrases]."""

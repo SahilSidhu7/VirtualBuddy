@@ -18,7 +18,7 @@ def main():
         for t in augment.test_set(base):
             tests.append(t); expected.append(name)
 
-    X = common.encoder().encode(tests, show_progress_bar=False)
+    X = common.embed(tests)
     preds = clf.predict(X)
 
     fails = []

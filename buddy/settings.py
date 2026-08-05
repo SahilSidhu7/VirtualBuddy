@@ -11,6 +11,7 @@ _DEFAULTS = {
     "llm_enabled": True,
     "llm_model": "qwen2.5:latest",
     "ollama_url": "http://localhost:11434",
+    "embed_model": "nomic-embed-text",
     "power_save": False,
     "server_port": 8770,
     "server_token": "changeme",

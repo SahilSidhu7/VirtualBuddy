@@ -31,7 +31,7 @@ def main():
           f"(+{len(extra)} from failures)")
 
     from sklearn.linear_model import LogisticRegression
-    X = common.encoder().encode(texts, show_progress_bar=False)
+    X = common.embed(texts)
     clf = LogisticRegression(max_iter=1000, C=8.0)
     clf.fit(X, labels)
     acc = clf.score(X, labels)

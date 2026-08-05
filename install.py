@@ -43,14 +43,21 @@ def get_voice():
             os.rename(os.path.join(models, n), os.path.join(models, "vosk"))
     print("      voice ready.")
 
+def train_brain():
+    print("[3/4] training the local intent model (uses Ollama embeddings)...")
+    r = subprocess.run([sys.executable, "-m", "tools.loop", "0.95", "4"], cwd=ROOT)
+    if r.returncode != 0:
+        print("      skipped (start Ollama, then run: python -m tools.loop)")
+
 def main():
     print(f"VirtualBuddy install on {platform.system()} (python {sys.version.split()[0]})")
     pip_install()
     check_ollama()
+    train_brain()
     if "--voice" in sys.argv:
         get_voice()
     else:
-        print("[3/3] skipping voice (run with --voice to add it).")
+        print("[4/4] skipping voice (run with --voice to add it).")
     print("\nDone. Start with:")
     print("  python app.py        (control panel)")
     print("  python run.py        (text mode)")

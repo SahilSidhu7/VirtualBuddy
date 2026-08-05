@@ -1,42 +1,26 @@
 """The brain: understands a command and picks the right skill.
 
-How: embed the user's words, compare to each skill's example phrases,
-best match wins. If nothing is close enough -> hand to Claude.
-
-If sentence-transformers isn't installed, falls back to simple word
-overlap so text mode still works with zero installs.
+Embeds the command + skill phrases (via Ollama or sentence-transformers), best
+match wins. If a trained classifier exists (from the 2-bot loop) it's used
+instead - more accurate. If no embedder at all, falls back to word overlap so
+text mode still works.
 """
+import os, numpy as np
+from buddy import embedder
 from buddy.skills import all_skills
 
-_model = None
-_index = []          # embed mode: list of (skill, phrase_vector)
-_use_embed = None    # None=unknown, True/False once decided
-_clf = None          # trained intent classifier (from the 2-bot loop), if any
+_cfg = {}
+_index = []          # [(skill, vec)] when using raw cosine
+_clf = None          # trained classifier bundle
 _skill_by_name = {}
-
-def _try_model():
-    global _model, _use_embed
-    if _use_embed is None:
-        try:
-            import os
-            os.environ.setdefault("USE_TF", "0")  # torch backend only, skip TF/Keras
-            from sentence_transformers import SentenceTransformer
-            _model = SentenceTransformer("all-MiniLM-L6-v2")  # small, free, local
-            _use_embed = True
-        except Exception:
-            _use_embed = False
-            print("[brain] embeddings unavailable -> using simple word match. "
-                  "pip install sentence-transformers for smarter matching.")
-    return _use_embed
+_use_embed = None
 
 def _cos(a, b):
-    import numpy as np
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-9))
 
 def _load_clf():
-    """Use the trained classifier from the 2-bot loop if it exists (more accurate)."""
     global _clf, _skill_by_name
-    import os, joblib
+    import joblib
     path = os.path.join(os.path.dirname(__file__), "..", "models", "intent_clf.joblib")
     if os.path.exists(path):
         try:
@@ -46,38 +30,42 @@ def _load_clf():
         except Exception:
             _clf = None
 
-def reload():
-    """Drop the cached classifier + index and rebuild (after retraining)."""
-    global _clf, _index
-    _clf, _index = None, []
-    build()
-
-def build():
-    """Embed every skill's phrases once at startup (embed mode only)."""
-    global _index
-    if not _try_model():
+def build(cfg=None):
+    global _cfg, _index, _use_embed
+    if cfg is not None:
+        _cfg = cfg
+    _use_embed = embedder.available(_cfg)
+    if not _use_embed:
+        print("[brain] no embedder -> word match. (start Ollama or pip install sentence-transformers)")
         return
     _load_clf()
-    if _clf is None:  # only need cosine index when there's no classifier
-        _index = [(sk, _model.encode(p)) for sk in all_skills() for p in sk["phrases"]]
+    if _clf is None:
+        skills = all_skills()
+        phrases = [p for s in skills for p in s["phrases"]]
+        owners = [s for s in skills for _ in s["phrases"]]
+        vecs = embedder.embed(phrases, _cfg)
+        _index = list(zip(owners, vecs))
+
+def reload(cfg=None):
+    global _clf, _index
+    _clf, _index = None, []
+    build(cfg)
 
 def _overlap(text, phrase):
     a, b = set(text.lower().split()), set(phrase.lower().split())
     return len(a & b) / (len(b) or 1)
 
 def route(text, threshold):
-    """Return (skill, score). skill is None if below threshold."""
-    if _try_model():
-        if not _index and _clf is None:
-            build()
-        q = _model.encode(text)
-        if _clf is not None:                          # trained classifier path
-            import numpy as np
+    if _use_embed is None:
+        build()
+    if _use_embed:
+        q = embedder.embed([text], _cfg)[0]
+        if _clf is not None:
             proba = _clf["clf"].predict_proba([q])[0]
             i = int(np.argmax(proba))
-            name = _clf["clf"].classes_[i]
-            best, best_score = _skill_by_name.get(name), float(proba[i])
-        else:                                          # raw cosine path
+            best = _skill_by_name.get(_clf["clf"].classes_[i])
+            best_score = float(proba[i])
+        else:
             best, best_score = None, -1.0
             for skill, vec in _index:
                 s = _cos(q, vec)

@@ -9,6 +9,7 @@ workspace: ./workspace
 llm_enabled: true
 llm_model: qwen2.5:latest
 ollama_url: http://localhost:11434
+embed_model: nomic-embed-text   # for intent matching (light, via Ollama)
 power_save: false
 # PC <-> mobile <-> PC sync (LAN command server)
 server_port: 8770

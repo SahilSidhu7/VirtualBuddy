@@ -1,23 +1,19 @@
-# Core (needed, small)
+# Core (small, needed)
 pyyaml
-
-# Brain - intent matching (medium download ~90MB model on first run)
-sentence-transformers
-
-# Voice IN (for --voice)
-vosk              # offline speech-to-text
-sounddevice       # mic input
-# Model: download vosk-model-small-en-us-0.15 -> unzip to ./models/vosk
-
-# Voice OUT (optional - talk back)
-pyttsx3           # offline text-to-speech, tiny
-
-# Character overlay uses tkinter (built into Python, no install)
-
-# Local intent training (2-bot loop) + screenshots
+numpy
 scikit-learn      # trains the local intent classifier
-joblib            # saves/loads it
-pillow            # screenshots
+joblib
+pyttsx3           # offline text-to-speech
+psutil            # system status, agents, serving
+pillow            # screenshots + character sprites
 
-# Web search skill uses only built-in urllib - no install
+# Intent embeddings come from Ollama (nomic-embed-text) - no torch needed.
+# Optional heavier fallback if you don't want to use Ollama for embeddings:
+# sentence-transformers
 
+# Voice input (optional, for --voice)
+vosk
+sounddevice
+# Model: installer --voice downloads vosk-model-small-en-us-0.15 -> models/vosk
+
+# Character overlay + web search use built-in tkinter / urllib (no install)

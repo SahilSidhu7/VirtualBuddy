@@ -27,7 +27,7 @@ class Agent:
         self.cfg = cfg
         self.ctx = {"cfg": cfg}
         self.last = None
-        brain.build()
+        brain.build(cfg)
         self.power_save = bool(cfg.get("power_save"))
         self._tools = tools_llm.build_tools()
         self._llm_up = (not self.power_save) and cfg.get("llm_enabled") and llm.is_up(cfg)
@@ -47,7 +47,7 @@ class Agent:
         return "Power-saving off - LLM back on." if self._llm_up else "LLM not reachable."
 
     def reload_brain(self):
-        brain.reload()
+        brain.reload(self.cfg)
 
     # ---- main ----
     def handle(self, text):
