@@ -3,6 +3,25 @@
 Local PC assistant. Voice or app commands -> runs tasks, manages files, controls Claude, reports back.
 Zero budget. Everything local. Simple files a non-tech person can read.
 
+**🌐 Website:** https://sahilsidhu7.github.io/VirtualBuddy/
+**🧩 Skills repo:** https://github.com/SahilSidhu7/virtualbuddy-skills
+
+## Install (Windows / macOS / Linux)
+```
+git clone https://github.com/SahilSidhu7/VirtualBuddy
+cd VirtualBuddy
+python install.py          # add --voice for offline speech
+python app.py              # control panel
+```
+Update anytime: `python update.py` (git pull + deps + retrain). Needs Python 3.9+
+and, for the local brain, [Ollama](https://ollama.com).
+
+## Characters
+robot · crab · duck · elf (pixel-art). Pick in the control panel or set
+`character:` in config.yaml. Add your own: a folder in `assets/character/<name>/`
+with `idle_0.png`, `idle_1.png`, `talk_0.png`. Regenerate defaults:
+`python -m tools.make_sprites && python -m tools.make_pixels`.
+
 ## Parts
 - `buddy/listener.py` - wake word + speech-to-text (offline, optional)
 - `buddy/brain.py`     - figures out what you want (embeddings) + picks a skill
