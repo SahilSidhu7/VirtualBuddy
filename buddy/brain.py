@@ -1,22 +1,16 @@
 """The brain: understands a command and picks the right skill.
 
-Embeds the command + skill phrases (via Ollama or sentence-transformers), best
-match wins. If a trained classifier exists (from the 2-bot loop) it's used
-instead - more accurate. If no embedder at all, falls back to word overlap so
-text mode still works.
+Uses a local TF-IDF + logistic-regression classifier (trained by the 2-bot
+loop) - runs in-process in under a millisecond, no Ollama needed. If it's not
+confident, the agent falls through to the local LLM (which can call skills too).
+If no classifier is trained yet, falls back to simple word overlap.
 """
 import os, numpy as np
-from buddy import embedder
 from buddy.skills import all_skills
 
-_cfg = {}
-_index = []          # [(skill, vec)] when using raw cosine
-_clf = None          # trained classifier bundle
+_clf = None
 _skill_by_name = {}
-_use_embed = None
-
-def _cos(a, b):
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-9))
+_loaded = False
 
 def _load_clf():
     global _clf, _skill_by_name
@@ -32,24 +26,13 @@ def _load_clf():
             _clf = None
 
 def build(cfg=None):
-    global _cfg, _index, _use_embed
-    if cfg is not None:
-        _cfg = cfg
-    _use_embed = embedder.available(_cfg)
-    if not _use_embed:
-        print("[brain] no embedder -> word match. (start Ollama or pip install sentence-transformers)")
-        return
+    global _loaded
     _load_clf()
-    if _clf is None:
-        skills = all_skills()
-        phrases = [p for s in skills for p in s["phrases"]]
-        owners = [s for s in skills for _ in s["phrases"]]
-        vecs = embedder.embed(phrases, _cfg)
-        _index = list(zip(owners, vecs))
+    _loaded = True
 
 def reload(cfg=None):
-    global _clf, _index
-    _clf, _index = None, []
+    global _clf, _loaded
+    _clf, _loaded = None, False
     build(cfg)
 
 def _overlap(text, phrase):
@@ -57,21 +40,14 @@ def _overlap(text, phrase):
     return len(a & b) / (len(b) or 1)
 
 def route(text, threshold):
-    if _use_embed is None:
+    """Return (skill, score). skill is None if below threshold."""
+    if not _loaded:
         build()
-    if _use_embed:
-        q = embedder.embed([text], _cfg)[0]
-        if _clf is not None:
-            proba = _clf["clf"].predict_proba([q])[0]
-            i = int(np.argmax(proba))
-            best = _skill_by_name.get(_clf["clf"].classes_[i])
-            best_score = float(proba[i])
-        else:
-            best, best_score = None, -1.0
-            for skill, vec in _index:
-                s = _cos(q, vec)
-                if s > best_score:
-                    best, best_score = skill, s
+    if _clf is not None:
+        proba = _clf["clf"].predict_proba([text])[0]
+        i = int(np.argmax(proba))
+        best = _skill_by_name.get(_clf["clf"].classes_[i])
+        best_score = float(proba[i])
     else:
         best, best_score = None, -1.0
         for skill in all_skills():

@@ -18,8 +18,7 @@ def main():
         for t in augment.test_set(base):
             tests.append(t); expected.append(name)
 
-    X = common.embed(tests)
-    preds = clf.predict(X)
+    preds = clf.predict(tests)     # pipeline vectorizes raw text
 
     fails = []
     for t, exp, got in zip(tests, expected, preds):

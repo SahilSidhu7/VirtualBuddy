@@ -12,7 +12,7 @@ _backend = None      # "ollama" | "st" | "none" | None(unknown)
 _st_model = None
 
 def _embed_call(base, model, chunk):
-    body = json.dumps({"model": model, "input": chunk}).encode()
+    body = json.dumps({"model": model, "input": chunk, "keep_alive": "30m"}).encode()
     req = urllib.request.Request(base + "/api/embed", data=body,
                                  headers={"Content-Type": "application/json"})
     return json.loads(urllib.request.urlopen(req, timeout=120).read())["embeddings"]

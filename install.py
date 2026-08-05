@@ -44,10 +44,10 @@ def get_voice():
     print("      voice ready.")
 
 def train_brain():
-    print("[3/4] training the local intent model (uses Ollama embeddings)...")
+    print("[3/4] training the local intent model (scikit-learn, offline, seconds)...")
     r = subprocess.run([sys.executable, "-m", "tools.loop", "0.95", "4"], cwd=ROOT)
     if r.returncode != 0:
-        print("      skipped (start Ollama, then run: python -m tools.loop)")
+        print("      skipped - you can run it later: python -m tools.loop")
 
 def main():
     print(f"VirtualBuddy install on {platform.system()} (python {sys.version.split()[0]})")

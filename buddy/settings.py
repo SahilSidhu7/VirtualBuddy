@@ -23,7 +23,7 @@ def clf_path():
 _DEFAULTS = {
     "wake_word": "buddy",
     "character": "robot",
-    "match_threshold": 0.40,
+    "match_threshold": 0.45,
     "speak_replies": True,
     "claude_cli": "claude",
     "workspace": os.path.join(HOME, "workspace"),
