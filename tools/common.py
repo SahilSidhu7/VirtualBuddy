@@ -6,12 +6,12 @@ os.environ.setdefault("USE_TF", "0")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA = os.path.join(ROOT, "data")
-MODELS = os.path.join(ROOT, "models")
-CLF_PATH = os.path.join(MODELS, "intent_clf.joblib")
+from buddy import settings                       # user-dir paths (survive updates)
+DATA = settings.data_dir()
+MODELS = settings.models_dir()
+CLF_PATH = settings.clf_path()
 FAIL_PATH = os.path.join(DATA, "failures.jsonl")
 SCORE_PATH = os.path.join(DATA, "score.json")
-os.makedirs(DATA, exist_ok=True)
 
 _cfg = None
 def cfg():

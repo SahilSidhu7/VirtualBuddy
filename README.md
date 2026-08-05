@@ -16,6 +16,10 @@ python app.py              # control panel
 Update anytime: `python update.py` (git pull + deps + retrain). Needs Python 3.9+
 and, for the local brain, [Ollama](https://ollama.com).
 
+Your settings + trained model live in **`~/.virtualbuddy/`** (config.yaml, workspace,
+models, data) — so they survive updates and work for the installed app. First launch
+offers to train the brain; it works immediately either way.
+
 ## Characters
 robot · crab · duck · elf (pixel-art). Pick in the control panel or set
 `character:` in config.yaml. Add your own: a folder in `assets/character/<name>/`

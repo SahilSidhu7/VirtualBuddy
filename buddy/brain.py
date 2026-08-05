@@ -21,7 +21,8 @@ def _cos(a, b):
 def _load_clf():
     global _clf, _skill_by_name
     import joblib
-    path = os.path.join(os.path.dirname(__file__), "..", "models", "intent_clf.joblib")
+    from buddy import settings
+    path = settings.clf_path()
     if os.path.exists(path):
         try:
             _clf = joblib.load(path)

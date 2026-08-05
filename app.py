@@ -12,17 +12,12 @@ from tkinter import ttk, messagebox
 import yaml
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-CFG = os.path.join(ROOT, "config.yaml")
 ASSETS = os.path.join(ROOT, "assets", "character")
 PY = sys.executable
 
-def load_cfg():
-    with open(CFG) as f:
-        return yaml.safe_load(f) or {}
-
-def save_cfg(cfg):
-    with open(CFG, "w") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False)
+from buddy import settings
+load_cfg = settings.load
+save_cfg = settings.save
 
 class App:
     def __init__(self):
@@ -37,6 +32,18 @@ class App:
         self._tab_sync(nb)
         self._tab_skills(nb)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
+        self.root.after(600, self._maybe_first_run)
+
+    def _maybe_first_run(self):
+        if not settings.is_first_run():
+            return
+        from buddy import embedder
+        if not embedder.available(self.cfg):        # needs Ollama; cosine works meanwhile
+            return
+        if messagebox.askyesno("Train buddy",
+                "First time here! Train buddy's brain now for better accuracy?\n"
+                "(~20s, runs locally on your Ollama — no internet, no tokens.)"):
+            self._train()
 
     # ---- Settings tab ----
     def _tab_settings(self, nb):

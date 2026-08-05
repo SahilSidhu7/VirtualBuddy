@@ -11,17 +11,23 @@ import numpy as np
 _backend = None      # "ollama" | "st" | "none" | None(unknown)
 _st_model = None
 
+def _embed_call(base, model, chunk):
+    body = json.dumps({"model": model, "input": chunk}).encode()
+    req = urllib.request.Request(base + "/api/embed", data=body,
+                                 headers={"Content-Type": "application/json"})
+    return json.loads(urllib.request.urlopen(req, timeout=120).read())["embeddings"]
+
 def _ollama_embed(texts, cfg):
     base = cfg.get("ollama_url", "http://localhost:11434")
     model = cfg.get("embed_model", "nomic-embed-text")
     out = []
-    for i in range(0, len(texts), 256):                 # batch for speed
-        chunk = texts[i:i + 256]
-        body = json.dumps({"model": model, "input": chunk}).encode()
-        req = urllib.request.Request(base + "/api/embed", data=body,
-                                     headers={"Content-Type": "application/json"})
-        d = json.loads(urllib.request.urlopen(req, timeout=120).read())
-        out.extend(d["embeddings"])
+    for i in range(0, len(texts), 64):                  # batch for speed (Ollama caps ~256)
+        chunk = texts[i:i + 64]
+        try:
+            out.extend(_embed_call(base, model, chunk))
+        except Exception:
+            for t in chunk:                              # fall back to one-at-a-time
+                out.extend(_embed_call(base, model, [t]))
     return np.array(out, dtype="float32")
 
 def available(cfg):

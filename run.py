@@ -31,6 +31,9 @@ def main():
     text_loop(agent)
 
 def text_loop(agent):
+    from buddy import settings
+    if settings.is_first_run():
+        print("Tip: buddy isn't trained yet — it works now (cosine), but !train makes it sharper.")
     print("VirtualBuddy ready. Commands: quit | !skills | !fix <skill> | !train | !power on|off")
     while True:
         try:
