@@ -1,0 +1,23 @@
+# Core (needed, small)
+pyyaml
+
+# Brain - intent matching (medium download ~90MB model on first run)
+sentence-transformers
+
+# Voice IN (for --voice)
+vosk              # offline speech-to-text
+sounddevice       # mic input
+# Model: download vosk-model-small-en-us-0.15 -> unzip to ./models/vosk
+
+# Voice OUT (optional - talk back)
+pyttsx3           # offline text-to-speech, tiny
+
+# Character overlay uses tkinter (built into Python, no install)
+
+# Local intent training (2-bot loop) + screenshots
+scikit-learn      # trains the local intent classifier
+joblib            # saves/loads it
+pillow            # screenshots
+
+# Web search skill uses only built-in urllib - no install
+

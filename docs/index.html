@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VirtualBuddy — your local PC assistant</title>
+<style>
+  :root{--bg:#0d1020;--card:#161b30;--fg:#eef2ff;--mut:#93a4c4;--acc:#4aa3ff;--gold:#ffd166;--edge:#242c48;--ok:#3ddc84}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg);line-height:1.55}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+  nav{position:sticky;top:0;z-index:10;background:rgba(13,16,32,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--edge)}
+  nav .wrap{display:flex;gap:18px;align-items:center;height:56px;flex-wrap:wrap}
+  nav a{color:var(--mut);text-decoration:none;font-size:.95rem}
+  nav a:hover{color:var(--fg)}
+  nav .brand{font-weight:700;color:var(--fg);margin-right:auto;display:flex;gap:8px;align-items:center}
+  nav .brand img{width:26px;image-rendering:pixelated}
+  .btn{background:var(--acc);color:#04122b;padding:9px 16px;border-radius:10px;font-weight:600;border:0;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn.ghost{background:transparent;border:1px solid var(--edge);color:var(--fg)}
+  header{text-align:center;padding:60px 20px 30px}
+  #hero{width:130px;height:130px;image-rendering:pixelated;cursor:pointer;animation:bob 2.4s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  h1{font-size:2.7rem;margin:.2em 0 .1em}
+  .tag{color:var(--mut);font-size:1.15rem;max-width:640px;margin:0 auto 8px}
+  .hint{color:var(--mut);font-size:.85rem}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:20px 0}
+  .pill{background:var(--card);border:1px solid var(--edge);padding:6px 12px;border-radius:20px;font-size:.9rem}
+  section{padding:44px 0;border-top:1px solid var(--edge)}
+  h2{font-size:1.7rem;margin:0 0 4px}
+  .sub{color:var(--mut);margin:0 0 22px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+  .card{background:var(--card);border:1px solid var(--edge);border-radius:14px;padding:18px}
+  .card h3{margin:0 0 6px;font-size:1.1rem}.card p{margin:0;color:var(--mut);font-size:.95rem}
+  .emoji{font-size:1.7rem}
+  /* demo */
+  #demo input{width:100%;font-size:1.05rem;padding:12px;border-radius:10px;border:1px solid var(--edge);background:#0b0e1c;color:var(--fg)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  .chip{background:#0b0e1c;border:1px solid var(--edge);color:var(--mut);border-radius:16px;padding:5px 10px;font-size:.82rem;cursor:pointer}
+  #route{margin-top:14px;background:#0b0e1c;border:1px solid var(--edge);border-radius:10px;padding:14px;min-height:60px}
+  .path{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .step{padding:4px 10px;border-radius:8px;font-size:.8rem;background:#1a2140;color:var(--mut)}
+  .step.on{background:var(--acc);color:#04122b;font-weight:600}
+  /* install tabs */
+  .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .tab{padding:8px 14px;border-radius:8px;border:1px solid var(--edge);background:var(--card);cursor:pointer;color:var(--mut)}
+  .tab.on{border-color:var(--acc);color:var(--fg)}
+  pre{background:#0b0e1c;border:1px solid var(--edge);border-radius:10px;padding:14px;overflow-x:auto;position:relative}
+  pre code{color:#cfe;font-size:.9rem;white-space:pre}
+  .copy{position:absolute;top:8px;right:8px;background:#1a2140;border:1px solid var(--edge);color:var(--mut);border-radius:6px;padding:3px 9px;font-size:.75rem;cursor:pointer}
+  /* accordion */
+  details{background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:6px 16px;margin-bottom:10px}
+  summary{cursor:pointer;font-weight:600;padding:10px 0}
+  details p,details li{color:var(--mut)}
+  .badge{display:inline-block;background:#123;color:var(--ok);border-radius:6px;padding:2px 8px;font-size:.72rem;margin-top:10px}
+  .auth{color:var(--mut);font-size:.8rem;margin-top:6px}
+  svg{max-width:100%;height:auto}
+  footer{text-align:center;color:var(--mut);padding:50px 20px}
+  a{color:var(--acc)}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <span class="brand"><img id="navimg" src="img/robot.png" alt="">VirtualBuddy</span>
+  <a href="#features">Features</a><a href="#demo">Try it</a><a href="#install">Install</a>
+  <a href="#sync">Sync</a><a href="#guides">Guides</a><a href="#skills">Skills</a>
+  <a class="btn ghost" id="repoLink" href="#" target="_blank">GitHub</a>
+</div></nav>
+
+<header>
+  <img id="hero" src="img/robot.png" alt="buddy" title="click me to change character">
+  <h1>VirtualBuddy</h1>
+  <p class="tag">A tiny assistant that lives on your screen. Runs tasks, controls your PC,
+     answers you — <b>offline and free</b>. Command by voice, text, the character, your phone,
+     or another PC.</p>
+  <p class="hint">👆 click buddy to swap character (robot · crab · duck · elf)</p>
+  <div class="pills">
+    <span class="pill">🖥️ Terminal</span><span class="pill">🎤 Voice</span>
+    <span class="pill">🧸 On-screen</span><span class="pill">📱 Phone</span>
+    <span class="pill">🔗 PC ↔ PC</span><span class="pill">💸 $0 / local</span>
+  </div>
+  <p><a class="btn" href="#install">Get started</a></p>
+</header>
+
+<div class="wrap">
+
+  <section id="features">
+    <h2>What it does</h2>
+    <p class="sub">A local brain + skills. Claude only as a last resort — your tokens stay yours.</p>
+    <div class="grid">
+      <div class="card"><div class="emoji">🧠</div><h3>Local brain</h3><p>Answers &amp; reasons with your own Ollama model. Offline, private, no tokens.</p></div>
+      <div class="card"><div class="emoji">🛠️</div><h3>Runs skills itself</h3><p>The model calls skills for you — even two things in one sentence.</p></div>
+      <div class="card"><div class="emoji">🎯</div><h3>Learns</h3><p>A locally-trained router picks the right skill instantly and learns from your corrections.</p></div>
+      <div class="card"><div class="emoji">🔋</div><h3>Power-saving</h3><p>One toggle frees the model from RAM. Skills &amp; web keep working.</p></div>
+      <div class="card"><div class="emoji">🌐</div><h3>Sync</h3><p>Command buddy from your phone or drive another PC over your WiFi.</p></div>
+      <div class="card"><div class="emoji">🧩</div><h3>Community skills</h3><p>One file = one skill. Share yours, install others in seconds.</p></div>
+    </div>
+  </section>
+
+  <section id="demo">
+    <h2>Try buddy</h2>
+    <p class="sub">Type a command — see how buddy decides what to do. (simulation)</p>
+    <input id="cmd" placeholder="e.g. take a screenshot   /   what is a subprocess   /   on pc2 lock the screen">
+    <div class="chips" id="chips"></div>
+    <div id="route"><span class="hint">start typing…</span></div>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p class="sub">Needs Python 3.9+ and (for the brain) <a href="https://ollama.com" target="_blank">Ollama</a>. Pick your OS:</p>
+    <div class="tabs" id="ostabs">
+      <div class="tab on" data-os="win">Windows</div>
+      <div class="tab" data-os="mac">macOS</div>
+      <div class="tab" data-os="linux">Linux</div>
+    </div>
+    <pre><button class="copy">copy</button><code id="installcode"></code></pre>
+    <p class="auth">First run downloads a small brain model into RAM (once), then it's fast. Add <code>--voice</code> to set up offline speech.</p>
+  </section>
+
+  <section id="sync">
+    <h2>How your machines link</h2>
+    <p class="sub">Everything talks over your own WiFi. No cloud, no accounts.</p>
+    <svg viewBox="0 0 720 260" role="img" aria-label="sync diagram">
+      <defs><style>.b{fill:#161b30;stroke:#4aa3ff;stroke-width:2;rx:12}
+        .t{fill:#eef2ff;font:600 14px system-ui}.m{fill:#93a4c4;font:12px system-ui}
+        .l{stroke:#4aa3ff;stroke-width:2;fill:none}</style></defs>
+      <rect class="b" x="290" y="20" width="150" height="70" rx="12"/>
+      <text class="t" x="312" y="48">PC 1 (host)</text><text class="m" x="312" y="68">buddy + server</text>
+      <rect class="b" x="40" y="170" width="150" height="60" rx="12"/>
+      <text class="t" x="70" y="196">📱 Phone</text><text class="m" x="60" y="216">web UI + 🎤</text>
+      <rect class="b" x="290" y="170" width="150" height="60" rx="12"/>
+      <text class="t" x="322" y="196">PC 2</text><text class="m" x="305" y="216">buddy peer</text>
+      <rect class="b" x="540" y="170" width="150" height="60" rx="12"/>
+      <text class="t" x="566" y="196">🤖 Ollama</text><text class="m" x="560" y="216">local model</text>
+      <path class="l" d="M290,60 C180,60 115,120 115,170"/>
+      <path class="l" d="M365,90 L365,170"/>
+      <path class="l" d="M440,60 C610,60 615,120 615,170"/>
+      <text class="m" x="150" y="120">HTTP + token</text>
+      <text class="m" x="375" y="135">relay: "on pc2 …"</text>
+      <text class="m" x="560" y="120">localhost</text>
+    </svg>
+    <p class="auth">The host runs a tiny token-protected HTTP server. Your phone opens its URL on the
+      same WiFi; other PCs running buddy are added as "peers" so you can say
+      <code>on pc2 lock the screen</code> and it runs there.</p>
+  </section>
+
+  <section id="guides">
+    <h2>Docs &amp; guides</h2>
+    <p class="sub">Short and practical.</p>
+    <details open><summary>Getting started</summary>
+      <ol><li>Install (above).</li><li><code>python app.py</code> opens the control panel.</li>
+      <li>Set your model + wake word, pick a character.</li>
+      <li><code>python run.py --character</code> to put buddy on screen.</li></ol></details>
+    <details><summary>Make a skill</summary>
+      <p>A skill is one Python file with a <code>SKILLS</code> list:</p>
+      <pre><code>SKILLS = [{
+  "name": "greet",
+  "desc": "say hello",
+  "phrases": ["say hi", "greet me"],
+  "run": lambda text, ctx: "Hey there!",
+}]</code></pre>
+      <p>Drop it in <code>buddy/skills/</code>, run <code>!train</code>. Full template in the skills repo.</p></details>
+    <details><summary>Set up phone + PC↔PC sync</summary>
+      <p><code>python run.py --server</code> (or the Sync tab). It prints a URL like
+      <code>http://192.168.1.20:8770</code>. Open it on your phone (same WiFi), enter the token
+      from <code>config.yaml</code>. For another PC, add it under <code>peers</code>.</p></details>
+    <details><summary>Save Claude tokens</summary>
+      <p>Order buddy tries: matched skill → local LLM → free web search → Claude (last).
+      Flip on <b>power-saving</b> to drop the LLM and free RAM entirely.</p></details>
+  </section>
+
+  <section id="skills">
+    <h2>Skill gallery</h2>
+    <p class="sub">Install any skill, then run <code>!train</code> in buddy.</p>
+    <div class="grid" id="gallery"><p class="hint">loading…</p></div>
+    <p style="margin-top:18px"><a class="btn ghost" id="skillsRepo" href="#" target="_blank">Browse / contribute skills →</a></p>
+  </section>
+
+</div>
+<footer>
+  VirtualBuddy — local, free, yours. ·
+  <a id="f1" href="#" target="_blank">Main repo</a> ·
+  <a id="f2" href="#" target="_blank">Skills repo</a>
+</footer>
+
+<script>
+  // ---- EDIT THESE after you create the repos ----
+  const GH_USER = "SahilSidhu7";
+  const MAIN_REPO = "https://github.com/"+GH_USER+"/VirtualBuddy";
+  const SKILLS_REPO = "https://github.com/"+GH_USER+"/virtualbuddy-skills";
+  const REGISTRY = "https://raw.githubusercontent.com/"+GH_USER+"/virtualbuddy-skills/main/registry.json";
+  document.getElementById('repoLink').href=MAIN_REPO;
+  document.getElementById('f1').href=MAIN_REPO;
+  document.getElementById('f2').href=SKILLS_REPO;
+  document.getElementById('skillsRepo').href=SKILLS_REPO;
+
+  // ---- character swap ----
+  const chars=["robot","crab","duck","elf"]; let ci=0;
+  const hero=document.getElementById('hero'), navimg=document.getElementById('navimg');
+  hero.onclick=()=>{ci=(ci+1)%chars.length;hero.src=navimg.src="img/"+chars[ci]+".png";};
+
+  // ---- try-it demo ----
+  const SKILLMAP=[
+    ["screenshot",["screenshot","capture","snap","screen"]],
+    ["lock",["lock","freeze"]],["time",["time","clock","date"]],
+    ["open_app",["open","launch","start "]],["status",["status","cpu","ram","battery","memory"]],
+    ["serving",["serving","port","server up","site up"]],
+    ["list_agents",["claude","agents"]],["list_projects",["projects","working on"]],
+    ["web_search",["search","google","look up","who is","what is the weather","latest"]],
+    ["notion_idea",["notion","idea","note","remember"]],
+    ["remote",["on pc","tell laptop","on pc2","other pc"]],
+  ];
+  const samples=["take a screenshot","what is a subprocess","on pc2 lock the screen",
+    "what's the weather in tokyo","list my projects","open chrome and lock in 5 min"];
+  const chips=document.getElementById('chips');
+  samples.forEach(s=>{const c=document.createElement('span');c.className='chip';c.textContent=s;
+    c.onclick=()=>{cmd.value=s;route();};chips.appendChild(c);});
+  const cmd=document.getElementById('cmd'), routeEl=document.getElementById('route');
+  function steps(active){return ["skill","local LLM","web","Claude"].map(s=>
+    `<span class="step ${s===active?'on':''}">${s}</span>`).join("");}
+  function route(){
+    const t=cmd.value.toLowerCase().trim();
+    if(!t){routeEl.innerHTML='<span class="hint">start typing…</span>';return;}
+    let hit=null;
+    for(const [name,keys] of SKILLMAP){if(keys.some(k=>t.includes(k))){hit=name;break;}}
+    if(/\bon pc|tell laptop|other pc\b/.test(t)) hit="remote";
+    let where,expl;
+    if(hit){where="skill";expl=`matched skill <b>${hit}</b> → runs instantly, no tokens.`;}
+    else if(t.endsWith("?")||/^(who|what|when|where|why|how)\b/.test(t)){
+      where="web";expl="looks like a question → local LLM answers, or free web search. No Claude tokens.";}
+    else{where="local LLM";expl="the local model decides — it can answer or call a skill itself.";}
+    routeEl.innerHTML=`<div class="path">${steps(where)}</div>${expl}`;
+  }
+  cmd.addEventListener('input',route);
+
+  // ---- install tabs ----
+  const CODE={
+    win:`git clone ${MAIN_REPO}\ncd VirtualBuddy\npython install.py\npython app.py`,
+    mac:`git clone ${MAIN_REPO}\ncd VirtualBuddy\npython3 install.py\npython3 app.py`,
+    linux:`git clone ${MAIN_REPO}\ncd VirtualBuddy\npython3 install.py\npython3 app.py`,
+  };
+  const codeEl=document.getElementById('installcode');
+  function setOS(os){codeEl.textContent=CODE[os];
+    document.querySelectorAll('#ostabs .tab').forEach(t=>t.classList.toggle('on',t.dataset.os===os));}
+  document.querySelectorAll('#ostabs .tab').forEach(t=>t.onclick=()=>setOS(t.dataset.os));
+  setOS('win');
+
+  // ---- copy buttons ----
+  document.addEventListener('click',e=>{
+    if(e.target.classList.contains('copy')){
+      const code=e.target.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(()=>{e.target.textContent='copied!';
+        setTimeout(()=>e.target.textContent='copy',1200);});
+    }});
+
+  // ---- skills gallery ----
+  const FALLBACK={skills:[{name:"example",title:"Example Echo",
+    description:"Echoes what you say. Starter template.",author:"virtualbuddy",
+    version:"1.0.0",file:"skill-template/example_skill.py",tokens:"none"}]};
+  function renderSkills(d){const g=document.getElementById('gallery');g.innerHTML='';
+    d.skills.forEach(s=>{const el=document.createElement('div');el.className='card';
+      el.innerHTML=`<h3>${s.title||s.name}</h3><p>${s.description||''}</p>
+        <span class="badge">${s.tokens==='none'?'no tokens':(s.tokens||'')}</span>
+        <div class="auth">by ${s.author||'anon'} · v${s.version||'1.0'}</div>
+        <pre><button class="copy">copy</button><code>python -m tools.install_skill ${s.file}</code></pre>`;
+      g.appendChild(el);});}
+  fetch(REGISTRY).then(r=>r.json()).then(renderSkills).catch(()=>renderSkills(FALLBACK));
+</script>
+</body>
+</html>
