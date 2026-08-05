@@ -23,7 +23,7 @@ jobs:
           pip install -r requirements.txt pyinstaller
       - name: Build app (PyInstaller)
         run: >
-          pyinstaller vb.py --name VirtualBuddy --noconfirm --console
+          pyinstaller vb.py --name VirtualBuddy --noconfirm --windowed
           --collect-submodules buddy --collect-submodules tools
           --hidden-import run --hidden-import app
           --add-data "assets;assets" --add-data "config.yaml;."
@@ -51,7 +51,7 @@ jobs:
           pip install -r requirements.txt pyinstaller
       - name: Build app (PyInstaller)
         run: >
-          pyinstaller vb.py --name VirtualBuddy --noconfirm --console
+          pyinstaller vb.py --name VirtualBuddy --noconfirm --windowed
           --collect-submodules buddy --collect-submodules tools
           --hidden-import run --hidden-import app
           --add-data "assets:assets" --add-data "config.yaml:."

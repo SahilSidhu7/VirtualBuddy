@@ -35,15 +35,10 @@ class App:
         self.root.after(600, self._maybe_first_run)
 
     def _maybe_first_run(self):
-        if not settings.is_first_run():
-            return
-        from buddy import embedder
-        if not embedder.available(self.cfg):        # needs Ollama; cosine works meanwhile
-            return
-        if messagebox.askyesno("Train buddy",
-                "First time here! Train buddy's brain now for better accuracy?\n"
-                "(~20s, runs locally on your Ollama — no internet, no tokens.)"):
-            self._train()
+        if settings.is_first_run():                  # train automatically (offline, seconds)
+            self.train_lbl.config(text="first run: training brain...")
+            from buddy import trainer
+            trainer.train_async(on_done=lambda: self.train_lbl.config(text="brain trained."))
 
     # ---- Settings tab ----
     def _tab_settings(self, nb):
@@ -124,10 +119,13 @@ class App:
 
     def _regen_sprites(self):
         def work():
-            for mod in ("tools.make_sprites", "tools.make_pixels"):
-                subprocess.run([PY, "-m", mod], cwd=ROOT, capture_output=True, text=True)
-            self.root.after(0, lambda: (self._load_preview(),
-                messagebox.showinfo("Sprites", "Regenerated robot + pixel characters.")))
+            try:
+                from tools import make_sprites, make_pixels
+                make_sprites.main(); make_pixels.main()
+                msg = "Regenerated robot + pixel characters."
+            except Exception as e:
+                msg = f"Failed: {e}"
+            self.root.after(0, lambda: (self._load_preview(), messagebox.showinfo("Sprites", msg)))
         threading.Thread(target=work, daemon=True).start()
 
     # ---- Sync tab (phone + other PCs) ----
@@ -179,13 +177,10 @@ class App:
         ttk.Button(f, text="Run 2-bot training loop", command=self._train).pack(pady=4)
 
     def _train(self):
-        self.train_lbl.config(text="training... (first run downloads model)")
-        def work():
-            r = subprocess.run([PY, "-m", "tools.loop", "0.95", "5"], cwd=ROOT,
-                               capture_output=True, text=True)
-            tail = (r.stdout or r.stderr).strip().splitlines()[-3:]
-            self.root.after(0, lambda: self.train_lbl.config(text=" | ".join(tail)))
-        threading.Thread(target=work, daemon=True).start()
+        self.train_lbl.config(text="training locally (offline, seconds)...")
+        from buddy import trainer
+        trainer.train_async(on_done=lambda: self.root.after(
+            0, lambda: self.train_lbl.config(text="brain trained.")))
 
     # ---- actions ----
     def _save(self):
@@ -200,8 +195,8 @@ class App:
         messagebox.showinfo("Saved", "Settings saved to config.yaml")
 
     def _launch(self, args):
-        p = subprocess.Popen([PY, "run.py", *args], cwd=ROOT)
-        self._procs.append(p)
+        from buddy import launcher
+        launcher.spawn(*args)
 
     def _close(self):
         for p in self._procs:

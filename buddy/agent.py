@@ -28,6 +28,10 @@ class Agent:
         self.ctx = {"cfg": cfg}
         self.last = None
         brain.build(cfg)
+        from buddy import settings, trainer
+        if settings.is_first_run():                       # auto-train once, in background
+            print("[agent] first run: training brain in background...")
+            trainer.train_async(on_done=self.reload_brain)
         self.power_save = bool(cfg.get("power_save"))
         self._tools = tools_llm.build_tools()
         self._llm_up = (not self.power_save) and cfg.get("llm_enabled") and llm.is_up(cfg)

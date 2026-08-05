@@ -1,10 +1,12 @@
-"""The on-screen buddy. Loads real sprite frames from assets/character/ and
-animates them. Drag it anywhere, click to type a command.
+"""The on-screen buddy. Loads sprite frames and animates them in place.
 
-If sprites or Pillow are missing, falls back to a simple drawn blob so it
-always runs. Regenerate/edit sprites with:  python -m tools.make_sprites
+Drag it anywhere, left-click to type a command, right-click for the menu.
+Commands run on a background thread so the UI never freezes.
+
+If sprites/Pillow are missing it falls back to a simple drawn blob.
+Regenerate sprites: python -m tools.make_sprites && python -m tools.make_pixels
 """
-import os, glob, tkinter as tk
+import os, glob, threading, tkinter as tk
 
 KEY = "#ff00ff"   # chroma-key color -> made transparent by the window
 _BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
@@ -20,12 +22,14 @@ class Buddy:
         try:
             self.root.attributes("-transparentcolor", KEY)  # Windows only
         except tk.TclError:
-            pass  # mac/linux: shows on a solid square instead
+            pass
 
-        self.frames = {}         # state -> [PhotoImage]
+        self.frames = {}
         self.size = self._load_frames()
         self.state = "idle"
         self.fi = 0
+        self._talk_left = 0
+        self.dragging = False
 
         self.root.geometry(f"{self.size}x{self.size}+300+300")
         self.c = tk.Canvas(self.root, width=self.size, height=self.size,
@@ -33,12 +37,13 @@ class Buddy:
         self.c.pack()
         self.img_id = self.c.create_image(self.size // 2, self.size // 2, anchor="center")
 
-        self.vx, self.vy = 2, 1
-        self.dragging = False
-        self._talk_left = 0
         self._bind()
         self._animate()
-        self._wander()
+
+    # ---- commands run off the UI thread so nothing freezes ----
+    def _dispatch(self, cmd):
+        self.talk()
+        threading.Thread(target=self.on_command, args=(cmd,), daemon=True).start()
 
     # ---- sprites ----
     def _load_frames(self):
@@ -47,20 +52,19 @@ class Buddy:
             self._ImageTk = ImageTk
         except ImportError:
             self.frames = None
-            return 90
+            return 96
         size = 96
         for state in ("idle", "talk"):
-            files = sorted(glob.glob(os.path.join(self.assets, f"{state}_*.png")))
             imgs = []
-            for fp in files:
+            for fp in sorted(glob.glob(os.path.join(self.assets, f"{state}_*.png"))):
                 im = Image.open(fp).convert("RGBA").resize((size, size), Image.LANCZOS)
-                bg = Image.new("RGB", im.size, KEY)     # flatten onto key color
+                bg = Image.new("RGB", im.size, KEY)
                 bg.paste(im, mask=im.split()[3])
                 imgs.append(self._ImageTk.PhotoImage(bg))
             if imgs:
                 self.frames[state] = imgs
         if not self.frames:
-            self.frames = None                          # nothing loaded -> blob mode
+            self.frames = None
         return size
 
     # ---- events ----
@@ -69,7 +73,7 @@ class Buddy:
         self.c.bind("<B1-Motion>", self._drag)
         self.c.bind("<ButtonRelease-1>", self._up)
         self.c.bind("<Double-Button-1>", lambda e: self._prompt())
-        self.c.bind("<Button-3>", self._menu)        # right-click = quick options
+        self.c.bind("<Button-3>", self._menu)
         self._build_menu()
 
     def _build_menu(self):
@@ -77,13 +81,13 @@ class Buddy:
         m.add_command(label="Ask buddy...", command=self._prompt)
         m.add_separator()
         for label, cmd in (("What time is it", "what time is it"),
-                           ("Take a screenshot", "take a screenshot"),
                            ("System status", "system status"),
-                           ("Lock PC", "lock my pc")):
-            m.add_command(label=label, command=lambda c=cmd: (self.talk(), self.on_command(c)))
+                           ("What am I serving", "what is my pc serving"),
+                           ("Take a screenshot", "take a screenshot")):
+            m.add_command(label=label, command=lambda c=cmd: self._dispatch(c))
         m.add_separator()
-        m.add_command(label="Settings", command=self._open_settings)
-        m.add_command(label="Quit", command=self.root.destroy)
+        m.add_command(label="Open dashboard", command=self._open_dashboard)
+        m.add_command(label="Quit buddy", command=self.root.destroy)
         self._m = m
 
     def _menu(self, e):
@@ -92,10 +96,9 @@ class Buddy:
         finally:
             self._m.grab_release()
 
-    def _open_settings(self):
-        import subprocess, sys, os
-        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        subprocess.Popen([sys.executable, "app.py"], cwd=root)
+    def _open_dashboard(self):
+        from buddy import launcher
+        launcher.spawn("--dashboard")
 
     def _down(self, e):
         self.dragging = True
@@ -117,18 +120,25 @@ class Buddy:
         win = tk.Toplevel(self.root)
         win.attributes("-topmost", True)
         win.title("Tell buddy")
-        e = tk.Entry(win, width=44); e.pack(padx=8, pady=8); e.focus()
+        e = tk.Entry(win, width=44); e.pack(padx=8, pady=8); e.focus_force()
+        out = tk.Label(win, text="", wraplength=320, justify="left", fg="#334")
+        out.pack(padx=8, pady=(0, 8))
         def go(_=None):
-            cmd = e.get().strip(); win.destroy()
-            if cmd:
-                self.talk()                     # react while it answers
-                self.on_command(cmd)
+            cmd = e.get().strip()
+            if not cmd:
+                return
+            out.config(text="...")
+            self.talk()
+            def work():
+                reply = self.on_command(cmd)
+                win.after(0, lambda: out.config(text=reply or ""))
+            threading.Thread(target=work, daemon=True).start()
         e.bind("<Return>", go)
 
     def talk(self, ms=1500):
         self._talk_left = ms
 
-    # ---- animation ----
+    # ---- animation (in place - no window moves, so no flicker) ----
     def _animate(self):
         state = "talk" if (self._talk_left > 0 and self.frames and "talk" in self.frames) else "idle"
         if self.frames:
@@ -136,9 +146,9 @@ class Buddy:
             self.fi = (self.fi + 1) % len(seq)
             self.c.itemconfig(self.img_id, image=seq[self.fi])
         else:
-            self._blob()                        # fallback drawing
-        self._talk_left = max(0, self._talk_left - 120)
-        self.root.after(120, self._animate)
+            self._blob()
+        self._talk_left = max(0, self._talk_left - 180)
+        self.root.after(180, self._animate)
 
     def _blob(self):
         self.c.delete("blob")
@@ -146,16 +156,6 @@ class Buddy:
         self.c.create_oval(15, 20, s-15, s-10, fill="#4aa3ff", outline="", tags="blob")
         for dx in (-12, 12):
             self.c.create_oval(s/2+dx-6, 40, s/2+dx+6, 52, fill="white", outline="", tags="blob")
-
-    def _wander(self):
-        if not self.dragging:
-            x, y = self.root.winfo_x(), self.root.winfo_y()
-            sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
-            x += self.vx; y += self.vy
-            if x < 0 or x > sw - self.size: self.vx *= -1
-            if y < 0 or y > sh - self.size: self.vy *= -1
-            self.root.geometry(f"+{x}+{y}")
-        self.root.after(40, self._wander)
 
     def run(self):
         self.root.mainloop()

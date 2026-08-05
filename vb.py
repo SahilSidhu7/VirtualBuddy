@@ -1,12 +1,21 @@
 """Single entry point for VirtualBuddy (used by the installers).
 
-  vb              -> control panel (GUI); on a headless server, text mode instead
+  vb              -> the on-screen buddy (GUI). Headless server -> text mode.
+  vb --dashboard  -> control panel
   vb --character  -> on-screen buddy
   vb --voice      -> voice mode
   vb --server     -> LAN command server (phone / other PCs)
-  vb --text       -> text mode
+  vb --text       -> text mode in this terminal
 """
 import os, sys
+
+def _setup_logging():
+    # windowed .exe has no console -> stdout/stderr are None; print() would crash.
+    if sys.stdout is None or sys.stderr is None:
+        from buddy import settings
+        os.makedirs(settings.HOME, exist_ok=True)
+        log = open(os.path.join(settings.HOME, "buddy.log"), "a", buffering=1)
+        sys.stdout = sys.stderr = log
 
 def _has_display():
     if os.name == "nt":
@@ -14,21 +23,31 @@ def _has_display():
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 def main():
+    _setup_logging()
     args = set(sys.argv[1:])
+
+    if "--dashboard" in args:
+        import app
+        return app.App().run()
+
     runtime = args & {"--character", "--voice", "--server", "--text"}
     if runtime:
         import run
         sys.argv = ["run.py"] + list(runtime)
         return run.main()
-    # no runtime flag: GUI control panel if we have a screen, else text
+
+    # no flag: show the character on a desktop, else text mode (headless)
     if _has_display():
-        import app
-        return app.App().run()
-    print("No display detected - starting text mode. (use 'vb --server' for a headless host)")
-    import run
-    from buddy.settings import load
-    from buddy.agent import Agent
-    run.text_loop(Agent(load()))
+        from buddy.settings import load
+        from buddy.agent import Agent
+        from buddy.character.character import Buddy
+        cfg = load()
+        Buddy(Agent(cfg).handle, cfg.get("character", "robot")).run()
+    else:
+        from buddy.settings import load
+        from buddy.agent import Agent
+        import run
+        run.text_loop(Agent(load()))
 
 if __name__ == "__main__":
     main()

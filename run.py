@@ -23,8 +23,9 @@ def main():
 
     if "--character" in args:
         from buddy.character.character import Buddy
-        # character owns the main thread (tkinter needs that); text loop runs beside it
-        threading.Thread(target=text_loop, args=(agent,), daemon=True).start()
+        # only run the typing loop if we actually have a console
+        if sys.stdin and sys.stdin.isatty():
+            threading.Thread(target=text_loop, args=(agent,), daemon=True).start()
         Buddy(agent.handle, cfg.get("character", "robot")).run()
         return
 
