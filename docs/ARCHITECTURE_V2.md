@@ -18,6 +18,7 @@
 | **Episodic memory** (things that happened) | event log | `buddy/memory/store.py` | JSONL + embeddings |
 | **Semantic memory** (facts you told me) | knowledge store | `buddy/memory/store.py` | JSONL + embeddings |
 | **Procedural memory** (how to do things) | skills + learned adapters | `buddy/skills/`, `models/adapters/` | Python + LoRA |
+| **Muscle memory** (a command I've done before) | command graph | `buddy/memory/graph.py` | embedding-indexed command→skill graph |
 | **Reflexes** (instant, no thinking) | intent classifier | `buddy/brain.py` | TF-IDF / cosine |
 | **Deliberate thought** | the brain (small LLM) | `buddy/llm.py` + brain host | Ollama |
 | **Hands** (act on the world) | executor | `buddy/actions/executor.py` | skills + guarded shell |

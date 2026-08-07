@@ -103,7 +103,13 @@ def teach(cfg, force=False):
     # Until that body is filled in, mark the batch consumed so we don't spin.
     adapter = os.path.join(settings.adapters_dir(), f"lessons-{int(time.time())}")
     os.makedirs(adapter, exist_ok=True)
-    json.dump({"lessons": lessons, "base": cfg.get("teach_base_model")},
+    # confirmed command->skill pairs buddy learned from use are training data too
+    try:
+        from buddy.memory.graph import CommandGraph
+        routes = [{"command": c, "skill": s} for c, s in CommandGraph(cfg).trainset()]
+    except Exception:
+        routes = []
+    json.dump({"lessons": lessons, "routes": routes, "base": cfg.get("teach_base_model")},
               open(os.path.join(adapter, "trainset.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=2)
 

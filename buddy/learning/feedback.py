@@ -78,8 +78,25 @@ def is_verdict(text):
     return low.startswith(_YES) or low.startswith(_NO)
 
 
-def record_verdict(text, cfg):
-    """Consume a yes/no reply for the pending action. Returns a short reply or None."""
+def _skill_named(name):
+    """Map a free-text skill name ('open app') to a real skill name if one matches."""
+    if not name:
+        return None
+    key = name.strip().lower().replace(" ", "_")
+    try:
+        from buddy.skills import all_skills
+        for s in all_skills():
+            if s["name"] == key or s["name"].replace("_", " ") == name.strip().lower():
+                return s["name"]
+    except Exception:
+        pass
+    return None
+
+
+def record_verdict(text, cfg, graph=None):
+    """Consume a yes/no reply for the pending action. Returns a short reply or None.
+    `graph` (a CommandGraph) is reinforced on 'yes' and penalised on 'no' so buddy's
+    command memory learns from every correction."""
     if not Pending.active():
         return None
     low = (text or "").lower().strip()
@@ -90,6 +107,8 @@ def record_verdict(text, cfg):
         counts[skill] = counts.get(skill, 0) + 1
         _save(counts)
         mem.get(cfg).note_episode(f"'{cmd}' -> {skill} (confirmed correct)")
+        if graph is not None:
+            graph.record(cmd, skill, ok=True)
         Pending.clear()
         left = max(0, cfg.get("ask_to_confirm_first_n", 5) - counts[skill])
         tail = "" if left else " I've got this one now — won't ask again."
@@ -100,6 +119,11 @@ def record_verdict(text, cfg):
         correct = (fix.group(1).strip() if fix else "").strip(" .")
         mem.get(cfg).learn_procedure(
             f"'{cmd}' should be handled by '{correct or 'a different skill'}', not '{skill}'")
+        if graph is not None:
+            graph.penalize(cmd, skill)                # this mapping was wrong
+            fixed = _skill_named(correct)
+            if fixed:
+                graph.record(cmd, fixed, ok=True)     # and this is the right one
         if correct:
             try:
                 from buddy.corrections import log_correction

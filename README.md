@@ -91,13 +91,24 @@ It prints a URL like `http://192.168.1.20:8770`. Open it on your phone
 (same WiFi), enter the token from `config.yaml`, then type or tap 🎤 to talk.
 Every command needs the token - change `server_token` from the default.
 
-Control another PC (both running the server): list peers in `config.yaml`
-(or the Sync tab), then:
+Control another PC (both running the server): add peers in the Sync tab (give
+each a nickname and pick a default), then:
 ```
-> on pc2 lock the screen
+> on gaming-pc lock the screen
 > tell laptop to take a screenshot
+> take a screenshot          # no name -> goes to your default peer
 ```
-Buddy relays it to that PC and shows its reply as `[pc2] ...`.
+Buddy relays it and shows the reply as `[gaming-pc] ...`. Nicknames ("the rig")
+and the default target are set in the Sync tab or `config.yaml`
+(`peers:` + `default_peer:`).
+
+## Buddy learns your commands
+Every time buddy runs a command it remembers what worked (an embedding-indexed
+command→skill graph under `~/.virtualbuddy/memory/`). Next time you say something
+similar, it reuses the skill that worked before instead of re-guessing — so it
+gets more *yours* the more you use it. Early on it asks "did I get that right?";
+your yes/no tunes the memory. Confirmed commands also become the training set the
+fine-tuner batches up (`command_memory: true` to toggle).
 
 ## Power-saving mode
 Frees resources: unloads the LLM from RAM, skips it entirely. Skills, web

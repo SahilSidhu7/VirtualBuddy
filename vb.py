@@ -22,8 +22,23 @@ def _has_display():
         return True
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
+def _auto_update():
+    """If enabled, pull updates in the background so the next launch runs them."""
+    try:
+        from buddy.settings import load
+        if not load().get("auto_update"):
+            return
+        import threading, update
+        def work():
+            changed, msg = update.pull_only()
+            print(f"[update] {msg}")
+        threading.Thread(target=work, daemon=True).start()
+    except Exception as e:
+        print(f"[update] skipped: {e}")
+
 def main():
     _setup_logging()
+    _auto_update()
     args = set(sys.argv[1:])
 
     if "--dashboard" in args:

@@ -42,7 +42,10 @@ _DEFAULTS = {
     "server_port": 8770,
     "server_token": "changeme",
     "peers": {},
+    "default_peer": "",               # peer used when a remote command names no machine
     "projects_dirs": [],
+    # ---- updates ----
+    "auto_update": False,             # check for + pull updates on launch (git checkouts only)
     "notion_token": "",
     "notion_db": "",
     # ---- v2: brain host (client/server split) ----
@@ -57,6 +60,10 @@ _DEFAULTS = {
     # ---- v2: continuous learning ----
     "learning_enabled": True,
     "ask_to_confirm_first_n": 5,      # buddy asks "did I do that right?" the first N times per skill
+    # ---- v2: command-graph memory (similarity -> reuse a known-good skill) ----
+    "command_memory": True,           # reuse the skill that worked for a similar past command
+    "cmd_sim_hit": 0.82,              # cosine >= this to reuse a remembered command's skill
+    "cmd_sim_dedup": 0.93,            # cosine >= this = same command, just strengthen it
     "teach_after_n_lessons": 25,      # queue a LoRA fine-tune once this many new lessons pile up
     "teach_base_model": "qwen2.5:0.5b",  # small model the 1050ti can actually fine-tune
     # ---- v2: on-screen character ----

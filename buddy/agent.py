@@ -8,12 +8,14 @@ Fallback order (cheapest first, saves Claude tokens):
 
 Power-saving mode skips the LLM entirely and frees its RAM.
 """
-from buddy import brain, voice, llm, tools_llm
+from buddy import brain, voice, llm, tools_llm, peers as peer_book
 from buddy.skills.web import search as web_search
 from buddy.skills.claude_ctl import ask_claude
 from buddy.skills.remote import remote as remote_relay
 from buddy.memory.memory import Memory
+from buddy.memory.graph import CommandGraph
 from buddy.learning import feedback
+from buddy.skills import all_skills as _all_skills
 
 _RELAY_WORDS = ("on ", "tell ", "send ", "run on ", "@")
 
@@ -28,7 +30,8 @@ class Agent:
     def __init__(self, cfg):
         self.cfg = cfg
         self.mem = Memory(cfg)
-        self.ctx = {"cfg": cfg, "mem": self.mem}
+        self.cmdgraph = CommandGraph(cfg)          # learned command -> skill memory
+        self.ctx = {"cfg": cfg, "mem": self.mem, "graph": self.cmdgraph}
         self.last = None
         brain.build(cfg)
         from buddy import settings, trainer
@@ -63,7 +66,7 @@ class Agent:
             return ""
         # is this a yes/no answer to buddy's "did I do that right?" question?
         if feedback.Pending.active() and feedback.is_verdict(text):
-            reply = feedback.record_verdict(text, self.cfg)
+            reply = feedback.record_verdict(text, self.cfg, graph=self.cmdgraph)
             if reply:
                 voice.say(reply, self.cfg["speak_replies"])
                 return reply
@@ -72,17 +75,42 @@ class Agent:
             reply = remote_relay(text, self.ctx)
             voice.say(reply, self.cfg["speak_replies"])
             return reply
-        skill, score = brain.route(text, self.cfg["match_threshold"])
+
+        # 1) has buddy already made a similar command work? just do that skill again.
+        skill = self._skill_from_memory(text)
+        source = "memory"
+        if skill is None:                               # 2) otherwise route with the classifier
+            skill, _ = brain.route(text, self.cfg["match_threshold"])
+            source = "classifier"
+            skill = self._guard_remote(skill, text)     # never let a local command hit 'remote'
+
         if skill is not None:
             self.last = (text, skill["name"])
             reply = skill["run"](text, self.ctx)
             self.mem.note_episode(f"'{text}' -> {skill['name']}")
-            reply = self._maybe_confirm(skill["name"], text, reply)
+            self.cmdgraph.record(text, skill["name"], ok=True)   # learn from doing
+            if source == "classifier":                  # only quiz on fresh (unlearned) routes
+                reply = self._maybe_confirm(skill["name"], text, reply)
         else:
             self.last = (text, None)
             reply = self._fallback(text)
         voice.say(reply, self.cfg["speak_replies"])
         return reply
+
+    def _skill_from_memory(self, text):
+        """If the command graph confidently knows this command, return its skill."""
+        name, _score = self.cmdgraph.recall(text)
+        if not name:
+            return None
+        return brain._skill_by_name.get(name) or next(
+            (s for s in _all_skills() if s["name"] == name), None)
+
+    def _guard_remote(self, skill, text):
+        """The 'remote' skill only applies when the text actually targets a peer.
+        Guards against a misroute turning 'open chrome' into 'No peers set'."""
+        if skill is not None and skill["name"] == "remote" and not self._is_remote(text):
+            return None
+        return skill
 
     def _maybe_confirm(self, skill_name, text, reply):
         """First few times a skill runs, ask the user whether buddy got it right."""
@@ -92,10 +120,13 @@ class Agent:
         return reply
 
     def _is_remote(self, text):
-        peers = self.cfg.get("peers") or {}
         low = text.lower()
-        return (any(p.lower() in low for p in peers)
-                and any(w in low for w in _RELAY_WORDS))
+        if not any(w in low for w in _RELAY_WORDS):     # "on/tell/send ..." required
+            return False
+        if peer_book.mentions_peer(self.cfg, text):     # named a peer or one of its nicknames
+            return True
+        generic = any(g in low for g in ("other pc", "other computer", "my server", "the server"))
+        return generic and peer_book.default_peer(self.cfg) is not None
 
     def _fallback(self, text):
         if self._llm_up:

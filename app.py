@@ -75,6 +75,7 @@ class App:
         self.v_thr = tk.DoubleVar(value=self.cfg.get("match_threshold", 0.40))
         self.v_speak = tk.BooleanVar(value=self.cfg.get("speak_replies", True))
         self.v_power = tk.BooleanVar(value=self.cfg.get("power_save", False))
+        self.v_autoupd = tk.BooleanVar(value=self.cfg.get("auto_update", False))
         self.v_cli = tk.StringVar(value=self.cfg.get("claude_cli", "claude"))
 
         ttk.Label(f, text="Wake word").grid(row=0, column=0, sticky="w", pady=6)
@@ -97,10 +98,37 @@ class App:
         ttk.Button(f, text="Save settings", command=self._save).grid(row=5, column=1, sticky="w", pady=12)
 
         ttk.Separator(f, orient="horizontal").grid(row=6, column=0, columnspan=3, sticky="ew", pady=8)
-        ttk.Label(f, text="Launch buddy").grid(row=7, column=0, sticky="w")
-        ttk.Button(f, text="Text mode", command=lambda: self._launch([])).grid(row=8, column=0, pady=4)
-        ttk.Button(f, text="Voice mode", command=lambda: self._launch(["--voice"])).grid(row=8, column=1, pady=4)
-        ttk.Button(f, text="Character", command=lambda: self._launch(["--character"])).grid(row=8, column=2, pady=4)
+        ttk.Label(f, text="Updates").grid(row=7, column=0, sticky="w")
+        ttk.Checkbutton(f, text="Auto-update on launch (git checkout only)",
+                        variable=self.v_autoupd, command=self._save_autoupd).grid(
+            row=8, column=1, columnspan=2, sticky="w", pady=2)
+        ttk.Button(f, text="Update now", command=self._update_now).grid(row=9, column=0, pady=4)
+        self.upd_lbl = ttk.Label(f, text="")
+        self.upd_lbl.grid(row=9, column=1, columnspan=2, sticky="w")
+
+        ttk.Separator(f, orient="horizontal").grid(row=10, column=0, columnspan=3, sticky="ew", pady=8)
+        ttk.Label(f, text="Launch buddy").grid(row=11, column=0, sticky="w")
+        ttk.Button(f, text="Text mode", command=lambda: self._launch([])).grid(row=12, column=0, pady=4)
+        ttk.Button(f, text="Voice mode", command=lambda: self._launch(["--voice"])).grid(row=12, column=1, pady=4)
+        ttk.Button(f, text="Character", command=lambda: self._launch(["--character"])).grid(row=12, column=2, pady=4)
+
+    def _save_autoupd(self):
+        self.cfg["auto_update"] = self.v_autoupd.get()
+        save_cfg(self.cfg)
+
+    def _update_now(self):
+        self.upd_lbl.config(text="updating (pull + retrain)...")
+        def work():
+            try:
+                import update
+                changed, msg = update.pull_only()
+                if changed:
+                    subprocess.run([PY, "-m", "tools.loop", "0.95", "4"], cwd=ROOT)
+                    msg = "updated + retrained brain."
+            except Exception as e:
+                msg = f"update failed: {e}"
+            self.root.after(0, lambda: self.upd_lbl.config(text=msg))
+        threading.Thread(target=work, daemon=True).start()
 
     # ---- Character tab ----
     def _tab_character(self, nb):
@@ -175,28 +203,57 @@ class App:
         ttk.Button(f, text="Start server", command=lambda: self._launch(["--server"])).pack(pady=8)
 
         ttk.Separator(f, orient="horizontal").pack(fill="x", pady=8)
-        ttk.Label(f, text="Peer PCs (control other machines)").pack()
-        peers = self.cfg.get("peers") or {}
+        ttk.Label(f, text="Peer PCs (control other machines). ★ = default target").pack()
         self.peer_box = tk.Listbox(f, height=4, width=54, bg=self.CARD, fg=self.FG,
                                    relief="flat", highlightthickness=1,
                                    highlightbackground=self.EDGE,
                                    selectbackground=self.ACC, selectforeground=self.ACC_TEXT)
-        for k, v in peers.items():
-            self.peer_box.insert("end", f"{k}  ->  {v}")
         self.peer_box.pack(pady=4)
+        self._refresh_peers()
         row = ttk.Frame(f); row.pack()
-        self.p_name = ttk.Entry(row, width=12); self.p_name.grid(row=0, column=0, padx=2)
-        self.p_url = ttk.Entry(row, width=30); self.p_url.grid(row=0, column=1, padx=2)
-        self.p_name.insert(0, "pc2"); self.p_url.insert(0, "http://192.168.1.x:8770")
-        ttk.Button(row, text="Add peer", command=self._add_peer).grid(row=0, column=2, padx=2)
+        self.p_name = ttk.Entry(row, width=10); self.p_name.grid(row=0, column=0, padx=2)
+        self.p_url = ttk.Entry(row, width=24); self.p_url.grid(row=0, column=1, padx=2)
+        ttk.Button(row, text="Add", command=self._add_peer).grid(row=0, column=2, padx=2)
+        self.p_name.insert(0, "laptop"); self.p_url.insert(0, "http://192.168.1.x:8770")
+        row2 = ttk.Frame(f); row2.pack(pady=2)
+        ttk.Label(row2, text="Nicknames (comma-sep):").grid(row=0, column=0, padx=2)
+        self.p_alias = ttk.Entry(row2, width=28); self.p_alias.grid(row=0, column=1, padx=2)
+        ttk.Button(f, text="Set selected as default",
+                   command=self._set_default_peer).pack(pady=4)
+
+    def _peer_names(self):
+        return list((self.cfg.get("peers") or {}).keys())
+
+    def _refresh_peers(self):
+        self.peer_box.delete(0, "end")
+        from buddy import peers as peer_book
+        default = self.cfg.get("default_peer", "")
+        for name, p in peer_book.normalize(self.cfg).items():
+            mark = "★ " if name == default else "  "
+            nick = f"   [{', '.join(p['aliases'])}]" if p["aliases"] else ""
+            self.peer_box.insert("end", f"{mark}{name}  ->  {p['url']}{nick}")
 
     def _add_peer(self):
         name, url = self.p_name.get().strip(), self.p_url.get().strip()
         if not name or not url:
             return
-        self.cfg.setdefault("peers", {})[name] = url
+        aliases = [a.strip() for a in self.p_alias.get().split(",") if a.strip()]
+        entry = {"url": url, "aliases": aliases} if aliases else url
+        peers = self.cfg.setdefault("peers", {})
+        peers[name] = entry
+        if not self.cfg.get("default_peer"):     # first peer becomes the default
+            self.cfg["default_peer"] = name
         save_cfg(self.cfg)
-        self.peer_box.insert("end", f"{name}  ->  {url}")
+        self._refresh_peers()
+
+    def _set_default_peer(self):
+        sel = self.peer_box.curselection()
+        if not sel:
+            return
+        name = self._peer_names()[sel[0]]
+        self.cfg["default_peer"] = name
+        save_cfg(self.cfg)
+        self._refresh_peers()
 
     # ---- Skills tab ----
     def _tab_skills(self, nb):

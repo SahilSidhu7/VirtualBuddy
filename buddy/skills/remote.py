@@ -1,12 +1,13 @@
 """Send a command to another PC running buddy. PC1 <-> PC2 control over WiFi.
 
-Peers live in config.yaml:
-  peers:
-    pc2: "http://192.168.1.42:8770"
-    laptop: "http://192.168.1.55:8770"
-Say e.g. "on pc2 lock the screen" or "tell laptop to take a screenshot".
+Peers (with optional nicknames) live in config.yaml — see buddy/peers.py.
+Say e.g. "on gaming-pc lock the screen" or "tell laptop to take a screenshot".
+If you don't name a machine, buddy uses your default_peer.
 """
 import json, re, urllib.request
+
+from buddy import peers as peer_book
+
 
 def _relay(peer_url, text, token):
     body = json.dumps({"token": token, "text": text}).encode()
@@ -16,18 +17,23 @@ def _relay(peer_url, text, token):
         return json.loads(r.read()).get("reply", "(no reply)")
 
 def remote(text, ctx):
-    peers = ctx["cfg"].get("peers") or {}
-    if not peers:
-        return "No peers set. Add them under 'peers' in config.yaml."
-    low = text.lower()
-    target = next((name for name in peers if name.lower() in low), None)
+    cfg = ctx["cfg"]
+    known = peer_book.normalize(cfg)
+    if not known:
+        return ("No other machines set up yet. Add one in the dashboard's Sync tab "
+                "(or under 'peers' in config.yaml), then say e.g. 'on laptop lock the screen'.")
+    target, url = peer_book.resolve(cfg, text)
     if not target:
-        return f"Which PC? Known: {', '.join(peers)}."
-    # strip "on <peer>", "tell <peer> to" -> the sub-command for the other PC
-    sub = re.sub(rf"\b(on|tell|to|the)\b|\b{re.escape(target)}\b", " ", low)
+        return (f"Which machine? Known: {', '.join(known)}. "
+                f"Tip: set a default in the Sync tab so you can skip the name.")
+    low = text.lower()
+    # strip "on <peer>/alias", "tell <peer> to" -> the sub-command for the other PC
+    handles = [h for h in peer_book.names(cfg) if h in low]
+    strip = "|".join(re.escape(h) for h in handles + ["on", "tell", "to", "the"])
+    sub = re.sub(rf"\b({strip})\b", " ", low) if strip else low
     sub = re.sub(r"\s+", " ", sub).strip()
     try:
-        reply = _relay(peers[target], sub, ctx["cfg"].get("server_token", "changeme"))
+        reply = _relay(url, sub, cfg.get("server_token", "changeme"))
         return f"[{target}] {reply}"
     except Exception as e:
         return f"Could not reach {target}: {e}"
