@@ -12,6 +12,8 @@ from buddy import brain, voice, llm, tools_llm
 from buddy.skills.web import search as web_search
 from buddy.skills.claude_ctl import ask_claude
 from buddy.skills.remote import remote as remote_relay
+from buddy.memory.memory import Memory
+from buddy.learning import feedback
 
 _RELAY_WORDS = ("on ", "tell ", "send ", "run on ", "@")
 
@@ -25,7 +27,8 @@ def _looks_like_question(t):
 class Agent:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.ctx = {"cfg": cfg}
+        self.mem = Memory(cfg)
+        self.ctx = {"cfg": cfg, "mem": self.mem}
         self.last = None
         brain.build(cfg)
         from buddy import settings, trainer
@@ -58,6 +61,12 @@ class Agent:
         text = (text or "").strip()
         if not text:
             return ""
+        # is this a yes/no answer to buddy's "did I do that right?" question?
+        if feedback.Pending.active() and feedback.is_verdict(text):
+            reply = feedback.record_verdict(text, self.cfg)
+            if reply:
+                voice.say(reply, self.cfg["speak_replies"])
+                return reply
         if self._is_remote(text):                       # peer command -> relay, don't run locally
             self.last = (text, "remote")
             reply = remote_relay(text, self.ctx)
@@ -67,10 +76,19 @@ class Agent:
         if skill is not None:
             self.last = (text, skill["name"])
             reply = skill["run"](text, self.ctx)
+            self.mem.note_episode(f"'{text}' -> {skill['name']}")
+            reply = self._maybe_confirm(skill["name"], text, reply)
         else:
             self.last = (text, None)
             reply = self._fallback(text)
         voice.say(reply, self.cfg["speak_replies"])
+        return reply
+
+    def _maybe_confirm(self, skill_name, text, reply):
+        """First few times a skill runs, ask the user whether buddy got it right."""
+        if feedback.should_confirm(skill_name, self.cfg):
+            feedback.Pending.set(text, skill_name)
+            return f"{reply}\n{feedback.ask_line(skill_name)}"
         return reply
 
     def _is_remote(self, text):
@@ -90,8 +108,12 @@ class Agent:
         return ask_claude(text, self.ctx)
 
     def _llm_tools(self, text):
-        """Let the LLM answer or call one/many skills itself."""
-        msg = llm.chat([{"role": "system", "content": llm.SYSTEM},
+        """Let the LLM answer or call one/many skills itself, with relevant memories in context."""
+        system = llm.SYSTEM
+        recalled = self.mem.recall_block(text)          # human-like recall: top-k relevant memories
+        if recalled:
+            system = f"{system}\n\n{recalled}"
+        msg = llm.chat([{"role": "system", "content": system},
                         {"role": "user", "content": text}], self.cfg, tools=self._tools)
         calls = msg.get("tool_calls") or []
         if not calls:
@@ -106,3 +128,19 @@ class Agent:
                 except Exception: args = {}
             results.append(tools_llm.dispatch(fn.get("name"), args, self.ctx, text))
         return " ".join(r for r in results if r)
+
+
+def make_brain(cfg):
+    """Return the right brain for this device's role:
+      client   -> talk to the shared brain on the server (falls back to local if unreachable)
+      server / standalone -> a local Agent.
+    Both expose .handle(text), so callers (run.py, vb.py, UI) don't care which they got.
+    """
+    if cfg.get("role") == "client" and cfg.get("brain_host"):
+        from buddy.net.brain_client import BrainClient
+        client = BrainClient(cfg)
+        if client.available():
+            print(f"[agent] client role: using remote brain at {cfg['brain_host']}")
+            return client
+        print("[agent] client role: remote brain unreachable, running locally.")
+    return Agent(cfg)

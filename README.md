@@ -21,7 +21,7 @@ models, data) — so they survive updates and work for the installed app. First 
 offers to train the brain; it works immediately either way.
 
 ## Characters
-robot · crab · duck · elf (pixel-art). Pick in the control panel or set
+duck · robot · crab · elf (pixel-art). Pick in the control panel or set
 `character:` in config.yaml. Add your own: a folder in `assets/character/<name>/`
 with `idle_0.png`, `idle_1.png`, `talk_0.png`. Regenerate defaults:
 `python -m tools.make_sprites && python -m tools.make_pixels`.

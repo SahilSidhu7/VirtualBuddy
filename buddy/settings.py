@@ -17,12 +17,19 @@ def models_dir():
 def data_dir():
     d = os.path.join(HOME, "data"); os.makedirs(d, exist_ok=True); return d
 
+def memory_dir():
+    d = os.path.join(HOME, "memory"); os.makedirs(d, exist_ok=True); return d
+
+def adapters_dir():
+    """LoRA adapters the brain learns over time (one folder per adapter)."""
+    d = os.path.join(models_dir(), "adapters"); os.makedirs(d, exist_ok=True); return d
+
 def clf_path():
     return os.path.join(models_dir(), "intent_clf.joblib")
 
 _DEFAULTS = {
     "wake_word": "buddy",
-    "character": "robot",
+    "character": "duck",
     "match_threshold": 0.45,
     "speak_replies": True,
     "claude_cli": "claude",
@@ -38,6 +45,23 @@ _DEFAULTS = {
     "projects_dirs": [],
     "notion_token": "",
     "notion_db": "",
+    # ---- v2: brain host (client/server split) ----
+    # role: "standalone" (brain here) | "client" (use a remote brain) | "server" (brain host for others)
+    "role": "standalone",
+    "brain_host": "",                 # client role: http://SERVER_IP:8771 of the brain server
+    "brain_port": 8771,               # server role: port the brain API listens on
+    # ---- v2: human-like memory ----
+    "memory_enabled": True,
+    "memory_top_k": 5,                # how many memories to recall into context
+    "memory_min_score": 0.35,         # cosine cutoff for a relevant memory
+    # ---- v2: continuous learning ----
+    "learning_enabled": True,
+    "ask_to_confirm_first_n": 5,      # buddy asks "did I do that right?" the first N times per skill
+    "teach_after_n_lessons": 25,      # queue a LoRA fine-tune once this many new lessons pile up
+    "teach_base_model": "qwen2.5:0.5b",  # small model the 1050ti can actually fine-tune
+    # ---- v2: on-screen character ----
+    "roam": False,                    # False = sit in place, True = walk along the taskbar
+    "roam_speed": 40,                 # px/sec when roaming
 }
 
 def load():

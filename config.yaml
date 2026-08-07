@@ -1,6 +1,6 @@
 # VirtualBuddy settings - edit here or in the control panel (python app.py)
 wake_word: buddy
-character: robot            # robot | crab | duck | elf  (or your own folder in assets/character/)
+character: duck            # duck | robot | crab | elf  (or your own folder in assets/character/)
 match_threshold: 0.4
 speak_replies: true
 claude_cli: claude

@@ -13,9 +13,12 @@ _BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "assets", "character")
 
 class Buddy:
-    def __init__(self, on_command, character="robot"):
+    def __init__(self, on_command, character="duck", roam=False, roam_speed=40):
         self.on_command = on_command
         self.assets = os.path.join(_BASE, character)
+        self._roam_on = bool(roam)
+        self._roam_speed = roam_speed
+        self._roamer = None
         self.root = tk.Tk()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
@@ -113,6 +116,8 @@ class Buddy:
 
     def _up(self, e):
         self.dragging = False
+        if self._roamer is not None:
+            self._roamer.resync_from_window()   # fall from wherever it was dropped
         if not self._moved:
             self._prompt()
 
@@ -148,7 +153,23 @@ class Buddy:
         else:
             self._blob()
         self._talk_left = max(0, self._talk_left - 180)
+        self._roam_tick()
         self.root.after(180, self._animate)
+
+    # ---- roaming: walk the taskbar (opt-in; window only moves in roam mode) ----
+    def _roam_tick(self):
+        if not self._roam_on or self.dragging:
+            return
+        if self._roamer is None:
+            try:
+                from buddy.character.roam import RoamController
+                self.root.update_idletasks()
+                self._roamer = RoamController(self.root, self.size, self._roam_speed)
+            except Exception:
+                self._roam_on = False
+                return
+        x, y = self._roamer.step(0.18)          # matches the 180ms tick
+        self.root.geometry(f"+{x}+{y}")
 
     def _blob(self):
         self.c.delete("blob")

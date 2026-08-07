@@ -6,12 +6,19 @@
 """
 import sys, threading
 from buddy.settings import load
-from buddy.agent import Agent
+from buddy.agent import make_brain
 
 def main():
     cfg = load()
-    agent = Agent(cfg)
     args = sys.argv[1:]
+
+    if "--brain" in args or cfg.get("role") == "server":
+        # host the shared brain for the laptop/phone, then keep serving
+        from buddy.net.brain_server import serve as serve_brain
+        serve_brain(cfg)
+        return
+
+    agent = make_brain(cfg)          # local Agent, or a remote brain client (role: client)
 
     if "--server" in args:
         from buddy.server import serve
@@ -26,7 +33,8 @@ def main():
         # only run the typing loop if we actually have a console
         if sys.stdin and sys.stdin.isatty():
             threading.Thread(target=text_loop, args=(agent,), daemon=True).start()
-        Buddy(agent.handle, cfg.get("character", "robot")).run()
+        Buddy(agent.handle, cfg.get("character", "duck"),
+              roam=cfg.get("roam", False), roam_speed=cfg.get("roam_speed", 40)).run()
         return
 
     text_loop(agent)
@@ -52,6 +60,9 @@ def _repl_command(agent, cmd):
     from buddy import corrections
     parts = cmd.split(maxsplit=1)
     name = parts[0].lower()
+    if not hasattr(agent, "reload_brain") and name in ("!fix", "!train", "!power"):
+        print("  (not available in client mode — that runs on the brain server)")
+        return
     if name == "!skills":
         print(" ", ", ".join(corrections.skill_names()))
     elif name == "!fix":

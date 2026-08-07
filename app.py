@@ -26,6 +26,7 @@ class App:
         self.root.title("VirtualBuddy Control Panel")
         self.root.geometry("560x520")
         self._procs = []
+        self._theme()
         nb = ttk.Notebook(self.root); nb.pack(fill="both", expand=True, padx=8, pady=8)
         self._tab_settings(nb)
         self._tab_character(nb)
@@ -33,6 +34,33 @@ class App:
         self._tab_skills(nb)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self.root.after(600, self._maybe_first_run)
+
+    # ---- duck theme (warm yellow / orange) ----
+    BG = "#1c1810"; CARD = "#241e10"; FG = "#fff7e6"; MUT = "#c8b487"
+    ACC = "#ffc233"; ACC_HOVER = "#ffd166"; ACC_TEXT = "#2a1e00"; EDGE = "#3a3016"
+
+    def _theme(self):
+        self.root.configure(bg=self.BG)
+        s = ttk.Style(self.root)
+        s.theme_use("clam")
+        s.configure(".", background=self.BG, foreground=self.FG,
+                    fieldbackground=self.CARD, bordercolor=self.EDGE)
+        s.configure("TFrame", background=self.BG)
+        s.configure("TLabel", background=self.BG, foreground=self.FG)
+        s.configure("TCheckbutton", background=self.BG, foreground=self.FG)
+        s.map("TCheckbutton", background=[("active", self.BG)])
+        s.configure("TSeparator", background=self.EDGE)
+        s.configure("TNotebook", background=self.BG, bordercolor=self.EDGE)
+        s.configure("TNotebook.Tab", background=self.CARD, foreground=self.MUT, padding=(12, 6))
+        s.map("TNotebook.Tab", background=[("selected", self.ACC)],
+              foreground=[("selected", self.ACC_TEXT)])
+        s.configure("TButton", background=self.ACC, foreground=self.ACC_TEXT,
+                    borderwidth=0, focuscolor=self.ACC)
+        s.map("TButton", background=[("active", self.ACC_HOVER), ("pressed", self.ACC_HOVER)])
+        s.configure("TEntry", fieldbackground=self.CARD, foreground=self.FG, insertcolor=self.FG)
+        s.configure("TCombobox", fieldbackground=self.CARD, background=self.CARD, foreground=self.FG)
+        s.map("TCombobox", fieldbackground=[("readonly", self.CARD)])
+        s.configure("Horizontal.TScale", background=self.BG, troughcolor=self.CARD)
 
     def _maybe_first_run(self):
         if settings.is_first_run():                  # train automatically (offline, seconds)
@@ -80,12 +108,15 @@ class App:
         row = ttk.Frame(f); row.pack(pady=8)
         ttk.Label(row, text="Character:").grid(row=0, column=0, padx=4)
         chars = [d for d in os.listdir(ASSETS) if os.path.isdir(os.path.join(ASSETS, d))]
-        self.v_char = tk.StringVar(value=self.cfg.get("character", "robot"))
+        self.v_char = tk.StringVar(value=self.cfg.get("character", "duck"))
         self.char_pick = ttk.Combobox(row, textvariable=self.v_char, values=sorted(chars),
                                       width=14, state="readonly")
         self.char_pick.grid(row=0, column=1, padx=4)
         self.char_pick.bind("<<ComboboxSelected>>", lambda e: (self._load_preview(), self._save_char()))
-        self.preview = tk.Label(f); self.preview.pack(pady=12)
+        self.v_roam = tk.BooleanVar(value=self.cfg.get("roam", False))
+        ttk.Checkbutton(f, text="Roam — walk along the taskbar (off = sit in place)",
+                        variable=self.v_roam, command=self._save_roam).pack(pady=6)
+        self.preview = tk.Label(f, bg=self.BG, fg=self.MUT); self.preview.pack(pady=12)
         self._pv_frames = []; self._pv_i = 0
         self._load_preview()
         ttk.Button(f, text="Regenerate default sprites",
@@ -96,6 +127,10 @@ class App:
 
     def _save_char(self):
         self.cfg["character"] = self.v_char.get()
+        save_cfg(self.cfg)
+
+    def _save_roam(self):
+        self.cfg["roam"] = self.v_roam.get()
         save_cfg(self.cfg)
 
     def _load_preview(self):
@@ -122,7 +157,7 @@ class App:
             try:
                 from tools import make_sprites, make_pixels
                 make_sprites.main(); make_pixels.main()
-                msg = "Regenerated robot + pixel characters."
+                msg = "Regenerated built-in sprites (duck, robot, crab, elf)."
             except Exception as e:
                 msg = f"Failed: {e}"
             self.root.after(0, lambda: (self._load_preview(), messagebox.showinfo("Sprites", msg)))
@@ -142,7 +177,10 @@ class App:
         ttk.Separator(f, orient="horizontal").pack(fill="x", pady=8)
         ttk.Label(f, text="Peer PCs (control other machines)").pack()
         peers = self.cfg.get("peers") or {}
-        self.peer_box = tk.Listbox(f, height=4, width=54)
+        self.peer_box = tk.Listbox(f, height=4, width=54, bg=self.CARD, fg=self.FG,
+                                   relief="flat", highlightthickness=1,
+                                   highlightbackground=self.EDGE,
+                                   selectbackground=self.ACC, selectforeground=self.ACC_TEXT)
         for k, v in peers.items():
             self.peer_box.insert("end", f"{k}  ->  {v}")
         self.peer_box.pack(pady=4)
@@ -163,7 +201,9 @@ class App:
     # ---- Skills tab ----
     def _tab_skills(self, nb):
         f = ttk.Frame(nb); nb.add(f, text="Skills & Training")
-        box = tk.Text(f, height=12, width=64); box.pack(padx=6, pady=6)
+        box = tk.Text(f, height=12, width=64, bg=self.CARD, fg=self.FG,
+                      insertbackground=self.FG, relief="flat", highlightthickness=1,
+                      highlightbackground=self.EDGE); box.pack(padx=6, pady=6)
         try:
             sys.path.insert(0, ROOT)
             from buddy.skills import all_skills

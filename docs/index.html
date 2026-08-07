@@ -5,18 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VirtualBuddy — your local PC assistant</title>
 <style>
-  :root{--bg:#0d1020;--card:#161b30;--fg:#eef2ff;--mut:#93a4c4;--acc:#4aa3ff;--gold:#ffd166;--edge:#242c48;--ok:#3ddc84}
+  :root{--bg:#15120a;--card:#241e10;--fg:#fff7e6;--mut:#c8b487;--acc:#ffc233;--gold:#ff8a00;--edge:#3a3016;--ok:#8bd450;--ink:#2a1e00;--inset:#0f0c05;--raise:#2b2410}
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg);line-height:1.55}
   .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
-  nav{position:sticky;top:0;z-index:10;background:rgba(13,16,32,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--edge)}
+  nav{position:sticky;top:0;z-index:10;background:rgba(21,18,10,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--edge)}
   nav .wrap{display:flex;gap:18px;align-items:center;height:56px;flex-wrap:wrap}
   nav a{color:var(--mut);text-decoration:none;font-size:.95rem}
   nav a:hover{color:var(--fg)}
   nav .brand{font-weight:700;color:var(--fg);margin-right:auto;display:flex;gap:8px;align-items:center}
   nav .brand img{width:26px;image-rendering:pixelated}
-  .btn{background:var(--acc);color:#04122b;padding:9px 16px;border-radius:10px;font-weight:600;border:0;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn{background:var(--acc);color:var(--ink);padding:9px 16px;border-radius:10px;font-weight:600;border:0;cursor:pointer;text-decoration:none;display:inline-block}
   .btn.ghost{background:transparent;border:1px solid var(--edge);color:var(--fg)}
   header{text-align:center;padding:60px 20px 30px}
   #hero{width:130px;height:130px;image-rendering:pixelated;cursor:pointer;animation:bob 2.4s ease-in-out infinite}
@@ -34,25 +34,25 @@
   .card h3{margin:0 0 6px;font-size:1.1rem}.card p{margin:0;color:var(--mut);font-size:.95rem}
   .emoji{font-size:1.7rem}
   /* demo */
-  #demo input{width:100%;font-size:1.05rem;padding:12px;border-radius:10px;border:1px solid var(--edge);background:#0b0e1c;color:var(--fg)}
+  #demo input{width:100%;font-size:1.05rem;padding:12px;border-radius:10px;border:1px solid var(--edge);background:var(--inset);color:var(--fg)}
   .chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
-  .chip{background:#0b0e1c;border:1px solid var(--edge);color:var(--mut);border-radius:16px;padding:5px 10px;font-size:.82rem;cursor:pointer}
-  #route{margin-top:14px;background:#0b0e1c;border:1px solid var(--edge);border-radius:10px;padding:14px;min-height:60px}
+  .chip{background:var(--inset);border:1px solid var(--edge);color:var(--mut);border-radius:16px;padding:5px 10px;font-size:.82rem;cursor:pointer}
+  #route{margin-top:14px;background:var(--inset);border:1px solid var(--edge);border-radius:10px;padding:14px;min-height:60px}
   .path{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
-  .step{padding:4px 10px;border-radius:8px;font-size:.8rem;background:#1a2140;color:var(--mut)}
-  .step.on{background:var(--acc);color:#04122b;font-weight:600}
+  .step{padding:4px 10px;border-radius:8px;font-size:.8rem;background:var(--raise);color:var(--mut)}
+  .step.on{background:var(--acc);color:var(--ink);font-weight:600}
   /* install tabs */
   .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
   .tab{padding:8px 14px;border-radius:8px;border:1px solid var(--edge);background:var(--card);cursor:pointer;color:var(--mut)}
   .tab.on{border-color:var(--acc);color:var(--fg)}
-  pre{background:#0b0e1c;border:1px solid var(--edge);border-radius:10px;padding:14px;overflow-x:auto;position:relative}
-  pre code{color:#cfe;font-size:.9rem;white-space:pre}
-  .copy{position:absolute;top:8px;right:8px;background:#1a2140;border:1px solid var(--edge);color:var(--mut);border-radius:6px;padding:3px 9px;font-size:.75rem;cursor:pointer}
+  pre{background:var(--inset);border:1px solid var(--edge);border-radius:10px;padding:14px;overflow-x:auto;position:relative}
+  pre code{color:#ffe9b0;font-size:.9rem;white-space:pre}
+  .copy{position:absolute;top:8px;right:8px;background:var(--raise);border:1px solid var(--edge);color:var(--mut);border-radius:6px;padding:3px 9px;font-size:.75rem;cursor:pointer}
   /* accordion */
   details{background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:6px 16px;margin-bottom:10px}
   summary{cursor:pointer;font-weight:600;padding:10px 0}
   details p,details li{color:var(--mut)}
-  .badge{display:inline-block;background:#123;color:var(--ok);border-radius:6px;padding:2px 8px;font-size:.72rem;margin-top:10px}
+  .badge{display:inline-block;background:var(--raise);color:var(--ok);border-radius:6px;padding:2px 8px;font-size:.72rem;margin-top:10px}
   .auth{color:var(--mut);font-size:.8rem;margin-top:6px}
   svg{max-width:100%;height:auto}
   footer{text-align:center;color:var(--mut);padding:50px 20px}
@@ -62,19 +62,19 @@
 <body>
 
 <nav><div class="wrap">
-  <span class="brand"><img id="navimg" src="img/robot.png" alt="">VirtualBuddy</span>
+  <span class="brand"><img id="navimg" src="img/duck.png" alt="">VirtualBuddy</span>
   <a href="#features">Features</a><a href="#demo">Try it</a><a href="#install">Install</a>
   <a href="#sync">Sync</a><a href="#guides">Guides</a><a href="#skills">Skills</a>
   <a class="btn ghost" id="repoLink" href="#" target="_blank">GitHub</a>
 </div></nav>
 
 <header>
-  <img id="hero" src="img/robot.png" alt="buddy" title="click me to change character">
+  <img id="hero" src="img/duck.png" alt="buddy" title="click me to change character">
   <h1>VirtualBuddy</h1>
   <p class="tag">A tiny assistant that lives on your screen. Runs tasks, controls your PC,
      answers you — <b>offline and free</b>. Command by voice, text, the character, your phone,
      or another PC.</p>
-  <p class="hint">👆 click buddy to swap character (robot · crab · duck · elf)</p>
+  <p class="hint">👆 click buddy to swap character (duck · robot · crab · elf)</p>
   <div class="pills">
     <span class="pill">🖥️ Terminal</span><span class="pill">🎤 Voice</span>
     <span class="pill">🧸 On-screen</span><span class="pill">📱 Phone</span>
@@ -129,9 +129,9 @@
     <h2>How your machines link</h2>
     <p class="sub">Everything talks over your own WiFi. No cloud, no accounts.</p>
     <svg viewBox="0 0 720 260" role="img" aria-label="sync diagram">
-      <defs><style>.b{fill:#161b30;stroke:#4aa3ff;stroke-width:2;rx:12}
-        .t{fill:#eef2ff;font:600 14px system-ui}.m{fill:#93a4c4;font:12px system-ui}
-        .l{stroke:#4aa3ff;stroke-width:2;fill:none}</style></defs>
+      <defs><style>.b{fill:#241e10;stroke:#ffc233;stroke-width:2;rx:12}
+        .t{fill:#fff7e6;font:600 14px system-ui}.m{fill:#c8b487;font:12px system-ui}
+        .l{stroke:#ffc233;stroke-width:2;fill:none}</style></defs>
       <rect class="b" x="290" y="20" width="150" height="70" rx="12"/>
       <text class="t" x="312" y="48">PC 1 (host)</text><text class="m" x="312" y="68">buddy + server</text>
       <rect class="b" x="40" y="170" width="150" height="60" rx="12"/>
@@ -207,7 +207,7 @@
   document.getElementById('trainDoc').href=MAIN_REPO+"/blob/main/TRAINING.md";
 
   // ---- character swap ----
-  const chars=["robot","crab","duck","elf"]; let ci=0;
+  const chars=["duck","robot","crab","elf"]; let ci=0;
   const hero=document.getElementById('hero'), navimg=document.getElementById('navimg');
   hero.onclick=()=>{ci=(ci+1)%chars.length;hero.src=navimg.src="img/"+chars[ci]+".png";};
 

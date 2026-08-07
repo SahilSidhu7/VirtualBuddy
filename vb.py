@@ -37,17 +37,17 @@ def main():
         return run.main()
 
     # no flag: show the character on a desktop, else text mode (headless)
+    from buddy.settings import load
+    from buddy.agent import make_brain
+    cfg = load()
+    brain = make_brain(cfg)              # local Agent, or remote brain client (role: client)
     if _has_display():
-        from buddy.settings import load
-        from buddy.agent import Agent
         from buddy.character.character import Buddy
-        cfg = load()
-        Buddy(Agent(cfg).handle, cfg.get("character", "robot")).run()
+        Buddy(brain.handle, cfg.get("character", "duck"),
+              roam=cfg.get("roam", False), roam_speed=cfg.get("roam_speed", 40)).run()
     else:
-        from buddy.settings import load
-        from buddy.agent import Agent
         import run
-        run.text_loop(Agent(load()))
+        run.text_loop(brain)
 
 if __name__ == "__main__":
     main()
