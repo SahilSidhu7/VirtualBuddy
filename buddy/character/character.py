@@ -134,10 +134,20 @@ class Buddy:
                 return
             out.config(text="...")
             self.talk()
+            done = {"ok": False}
             def work():
-                reply = self.on_command(cmd)
+                try:
+                    reply = self.on_command(cmd)
+                except Exception as ex:
+                    reply = f"(error: {ex})"
+                done["ok"] = True
                 win.after(0, lambda: out.config(text=reply or ""))
             threading.Thread(target=work, daemon=True).start()
+            # watchdog: never let the bubble sit on "..." forever if a skill stalls
+            def watchdog():
+                if not done["ok"]:
+                    out.config(text="still working on it — taking longer than usual...")
+            win.after(30000, watchdog)
         e.bind("<Return>", go)
 
     def talk(self, ms=1500):
