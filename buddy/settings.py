@@ -66,6 +66,13 @@ _DEFAULTS = {
     "cmd_sim_dedup": 0.93,            # cosine >= this = same command, just strengthen it
     "teach_after_n_lessons": 25,      # queue a LoRA fine-tune once this many new lessons pile up
     "teach_base_model": "qwen2.5:0.5b",  # small model the 1050ti can actually fine-tune
+    # ---- v3: primitive planner (compose primitives for unknown commands) ----
+    "planner_enabled": True,          # try composing primitives before web/Claude fallback
+    # ---- v3: Claude integration (opt-in; uses tokens) ----
+    "use_claude": False,              # user has the Claude CLI and allows using it as last resort
+    "claude_writes_skills": False,    # when nothing else works, let Claude AUTHOR + run a new skill
+    "skill_approval": True,           # ask before installing/running a Claude-authored skill (off = auto)
+    "web_automation": True,           # allow Playwright-backed web primitives (open/read/click/fill)
     # ---- v2: on-screen character ----
     "roam": False,                    # False = sit in place, True = walk along the taskbar
     "roam_speed": 40,                 # px/sec when roaming

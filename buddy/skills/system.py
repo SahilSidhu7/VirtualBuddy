@@ -1,18 +1,14 @@
 """PC tasks: open apps, screenshot, lock, time. Uses slots for reliable details."""
 import os, subprocess, datetime, threading
 from buddy import slots
+from buddy.primitives import launch_app
 
 def _open_app(text, ctx):
     name = slots.app(text)
     if not name:
         return "Which app?"
     try:
-        if name.startswith("start "):          # ms-settings: etc
-            subprocess.Popen(name, shell=True)
-        elif os.name == "nt":
-            subprocess.Popen(name, shell=True)  # resolves PATH apps (chrome, code...)
-        else:
-            subprocess.Popen([name])
+        launch_app(name)                        # `start` on Windows -> App Paths resolves chrome/code/...
         return f"Opening {name}."
     except Exception as e:
         return f"Could not open {name}: {e}"

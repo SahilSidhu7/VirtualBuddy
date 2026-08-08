@@ -8,7 +8,7 @@ Fallback order (cheapest first, saves Claude tokens):
 
 Power-saving mode skips the LLM entirely and frees its RAM.
 """
-from buddy import brain, voice, llm, tools_llm, peers as peer_book
+from buddy import brain, voice, llm, tools_llm, planner, skill_writer, peers as peer_book
 from buddy.skills.web import search as web_search
 from buddy.skills.claude_ctl import ask_claude
 from buddy.skills.remote import remote as remote_relay
@@ -33,6 +33,7 @@ class Agent:
         self.cmdgraph = CommandGraph(cfg)          # learned command -> skill memory
         self.ctx = {"cfg": cfg, "mem": self.mem, "graph": self.cmdgraph}
         self.last = None
+        self.on_state = None        # optional sink (e.g. the character) for animation states
         brain.build(cfg)
         from buddy import settings, trainer
         if settings.is_first_run():                       # auto-train once, in background
@@ -59,11 +60,30 @@ class Agent:
     def reload_brain(self):
         brain.reload(self.cfg)
 
+    def _emit(self, state):
+        if self.on_state:
+            try:
+                self.on_state(state)
+            except Exception:
+                pass
+
     # ---- main ----
     def handle(self, text):
         text = (text or "").strip()
         if not text:
             return ""
+        # is this a yes/no answer to a Claude-drafted skill awaiting approval?
+        if skill_writer.Pending.active() and skill_writer.is_verdict(text):
+            reply = skill_writer.confirm(text, self.ctx, on_done=self.reload_brain)
+            if reply is not None:
+                voice.say(reply, self.cfg["speak_replies"])
+                return reply
+        # is this a yes/no answer to a pending plan buddy asked to confirm?
+        if planner.Pending.active() and planner.is_verdict(text):
+            reply = planner.confirm(text, self.ctx)
+            if reply is not None:
+                voice.say(reply, self.cfg["speak_replies"])
+                return reply
         # is this a yes/no answer to buddy's "did I do that right?" question?
         if feedback.Pending.active() and feedback.is_verdict(text):
             reply = feedback.record_verdict(text, self.cfg, graph=self.cmdgraph)
@@ -86,6 +106,7 @@ class Agent:
 
         if skill is not None:
             self.last = (text, skill["name"])
+            self._emit("working")                       # a known task is running
             reply = skill["run"](text, self.ctx)
             self.mem.note_episode(f"'{text}' -> {skill['name']}")
             self.cmdgraph.record(text, skill["name"], ok=True)   # learn from doing
@@ -129,14 +150,42 @@ class Agent:
         return generic and peer_book.default_peer(self.cfg) is not None
 
     def _fallback(self, text):
-        if self._llm_up:
+        self._emit("thinking")                        # working out what to do
+        is_q = _looks_like_question(text)
+        cfg = self.cfg
+        # 1) local planner composes primitives for an action (free)
+        if self._llm_up and not is_q:
             try:
-                return self._llm_tools(text)
+                reply = planner.run(text, self.ctx)
+                if reply is not None:
+                    return reply
             except Exception:
                 pass
-        if _looks_like_question(text):
+        # 2) action buddy still can't do + user opted in -> Claude AUTHORS a new skill
+        if not is_q and cfg.get("use_claude") and cfg.get("claude_writes_skills"):
+            try:
+                from buddy import skill_writer
+                reply = skill_writer.try_author(text, self.ctx, on_done=self.reload_brain)
+                if reply is not None:
+                    return reply
+            except Exception:
+                pass
+        # 3) local LLM answers or calls an existing skill (free)
+        if self._llm_up:
+            try:
+                reply = self._llm_tools(text)
+                if reply:
+                    return reply
+            except Exception:
+                pass
+        # 4) knowledge question -> free web search
+        if is_q:
             return web_search(text, self.ctx)
-        return ask_claude(text, self.ctx)
+        # 5) Claude as a plain answer, if the user opted in
+        if cfg.get("use_claude"):
+            return ask_claude(text, self.ctx)
+        return ("I can't do that one yet. Turn on Claude in the dashboard "
+                "and I can learn new skills for it.")
 
     def _llm_tools(self, text):
         """Let the LLM answer or call one/many skills itself, with relevant memories in context."""

@@ -17,3 +17,9 @@ def all_skills():
         skills.extend(getattr(m, "SKILLS", []))
     _cache = skills
     return skills
+
+def reload():
+    """Forget the cache so a newly-installed skill file is picked up."""
+    global _cache
+    _cache = None
+    return all_skills()

@@ -3,6 +3,14 @@
 Drag it anywhere, left-click to type a command, right-click for the menu.
 Commands run on a background thread so the UI never freezes.
 
+Buddy shows what it's doing via animation STATES (dedicated sprite frames):
+  idle       - waiting
+  listening  - voice is active, waiting for your command
+  thinking   - planner / LLM is working out what to do
+  working    - a task (primitive/skill) is running
+  talk       - speaking a reply  (transient, times out)
+The agent drives these through set_state(); missing states fall back to idle.
+
 If sprites/Pillow are missing it falls back to a simple drawn blob.
 Regenerate sprites: python -m tools.make_sprites && python -m tools.make_pixels
 """
@@ -11,6 +19,10 @@ import os, glob, threading, tkinter as tk
 KEY = "#ff00ff"   # chroma-key color -> made transparent by the window
 _BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "assets", "character")
+
+# every state we know how to load, in priority order for the animation loop
+_STATES = ("talk", "working", "thinking", "listening", "idle")
+
 
 class Buddy:
     def __init__(self, on_command, character="duck", roam=False, roam_speed=40):
@@ -29,9 +41,9 @@ class Buddy:
 
         self.frames = {}
         self.size = self._load_frames()
-        self.state = "idle"
+        self.active = "idle"        # sticky state driven by the agent / voice
         self.fi = 0
-        self._talk_left = 0
+        self._talk_left = 0         # transient "speaking" timer (ms)
         self.dragging = False
 
         self.root.geometry(f"{self.size}x{self.size}+300+300")
@@ -45,8 +57,24 @@ class Buddy:
 
     # ---- commands run off the UI thread so nothing freezes ----
     def _dispatch(self, cmd):
+        self.set_state("thinking")
+        def work():
+            try:
+                self.on_command(cmd)
+            finally:
+                self.root.after(0, self._reply_done)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _reply_done(self):
         self.talk()
-        threading.Thread(target=self.on_command, args=(cmd,), daemon=True).start()
+        self.set_state("idle")
+
+    # ---- state control (thread-safe) ----
+    def set_state(self, name):
+        """Set buddy's sticky animation state. Safe to call from any thread."""
+        if name not in _STATES:
+            name = "idle"
+        self.root.after(0, lambda: setattr(self, "active", name))
 
     # ---- sprites ----
     def _load_frames(self):
@@ -57,7 +85,7 @@ class Buddy:
             self.frames = None
             return 96
         size = 96
-        for state in ("idle", "talk"):
+        for state in _STATES:
             imgs = []
             for fp in sorted(glob.glob(os.path.join(self.assets, f"{state}_*.png"))):
                 im = Image.open(fp).convert("RGBA").resize((size, size), Image.LANCZOS)
@@ -133,7 +161,7 @@ class Buddy:
             if not cmd:
                 return
             out.config(text="...")
-            self.talk()
+            self.set_state("thinking")
             done = {"ok": False}
             def work():
                 try:
@@ -142,6 +170,7 @@ class Buddy:
                     reply = f"(error: {ex})"
                 done["ok"] = True
                 win.after(0, lambda: out.config(text=reply or ""))
+                self.root.after(0, self._reply_done)
             threading.Thread(target=work, daemon=True).start()
             # watchdog: never let the bubble sit on "..." forever if a skill stalls
             def watchdog():
@@ -154,9 +183,17 @@ class Buddy:
         self._talk_left = ms
 
     # ---- animation (in place - no window moves, so no flicker) ----
+    def _current(self):
+        """Highest-priority state that actually has frames loaded."""
+        if self._talk_left > 0 and self.frames and "talk" in self.frames:
+            return "talk"
+        if self.frames and self.active in self.frames:
+            return self.active
+        return "idle"
+
     def _animate(self):
-        state = "talk" if (self._talk_left > 0 and self.frames and "talk" in self.frames) else "idle"
         if self.frames:
+            state = self._current()
             seq = self.frames.get(state) or self.frames.get("idle")
             self.fi = (self.fi + 1) % len(seq)
             self.c.itemconfig(self.img_id, image=seq[self.fi])

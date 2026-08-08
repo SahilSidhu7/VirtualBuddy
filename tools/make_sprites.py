@@ -9,6 +9,36 @@ Run: python -m tools.make_sprites
 import os, math
 from PIL import Image, ImageDraw
 
+ACCENT = (255, 209, 102, 255)
+INK = (30, 40, 60, 255)
+
+
+def _dots(img, lit):
+    d = ImageDraw.Draw(img); r = S // 22
+    for i in range(3):
+        cx, cy = int(S * 0.66) + i * S // 12, int(S * 0.16)
+        fill = INK if i < lit else (INK[0], INK[1], INK[2], 70)
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=fill)
+
+
+def _waves(img, n):
+    d = ImageDraw.Draw(img)
+    for i in range(n):
+        pad = int(S * 0.05) + i * S // 14
+        d.arc([pad, int(S * 0.32), pad + S // 5, int(S * 0.68)], 110, 250,
+              fill=ACCENT, width=max(2, S // 40))
+
+
+def _gear(img, angle):
+    d = ImageDraw.Draw(img); cx, cy, rad = int(S * 0.80), int(S * 0.18), S // 12
+    for k in range(8):
+        a = angle + k * math.pi / 4
+        d.line([cx + math.cos(a) * rad, cy + math.sin(a) * rad,
+                cx + math.cos(a) * (rad + S // 24), cy + math.sin(a) * (rad + S // 24)],
+               fill=INK, width=max(2, S // 40))
+    d.ellipse([cx - rad, cy - rad, cx + rad, cy + rad], outline=INK, width=max(2, S // 40))
+    d.ellipse([cx - S // 24, cy - S // 24, cx + S // 24, cy + S // 24], fill=ACCENT)
+
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    "assets", "character", "robot")
 S = 128          # final size
@@ -66,7 +96,19 @@ def main():
     talk = [_draw(bob=-1, mouth="open"), _draw(bob=-1, mouth="smile")]
     for i, im in enumerate(talk):
         im.save(os.path.join(OUT, f"talk_{i}.png"))
-    print(f"wrote {len(idle)} idle + {len(talk)} talk frames to {OUT}")
+    # thinking: eyes up + thought dots filling in
+    for i, lit in enumerate((1, 2, 3)):
+        im = _draw(bob=-2 if i % 2 else 0); _dots(im, lit)
+        im.save(os.path.join(OUT, f"thinking_{i}.png"))
+    # listening: alert + sound waves
+    for i, n in enumerate((1, 2, 3)):
+        im = _draw(bob=0); _waves(im, n)
+        im.save(os.path.join(OUT, f"listening_{i}.png"))
+    # working: gear spins
+    for i in range(4):
+        im = _draw(bob=-1 if i % 2 else 1, mouth="open"); _gear(im, i * math.pi / 6)
+        im.save(os.path.join(OUT, f"working_{i}.png"))
+    print(f"wrote idle/talk/thinking/listening/working frames to {OUT}")
 
 if __name__ == "__main__":
     main()

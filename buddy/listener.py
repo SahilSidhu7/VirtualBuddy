@@ -19,7 +19,11 @@ def _find_model():
                 return os.path.join(base, name)
     return None
 
-def listen_loop(cfg, on_command):
+def listen_loop(cfg, on_command, on_state=None):
+    def _state(s):
+        if on_state:
+            try: on_state(s)
+            except Exception: pass
     try:
         import sounddevice as sd
         from vosk import Model, KaldiRecognizer, SetLogLevel
@@ -61,4 +65,5 @@ def listen_loop(cfg, on_command):
                     on_command(cmd)
                 else:                       # just the wake word -> wait for next
                     awake = True
+                    _state("listening")
                     print("(listening for your command...)")

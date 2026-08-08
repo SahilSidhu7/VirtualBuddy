@@ -26,15 +26,20 @@ def main():
 
     if "--voice" in args:
         from buddy.listener import listen_loop
-        threading.Thread(target=listen_loop, args=(cfg, agent.handle), daemon=True).start()
+        threading.Thread(target=listen_loop,
+                         args=(cfg, agent.handle, getattr(agent, "_emit", None)),
+                         daemon=True).start()
 
     if "--character" in args:
         from buddy.character.character import Buddy
         # only run the typing loop if we actually have a console
         if sys.stdin and sys.stdin.isatty():
             threading.Thread(target=text_loop, args=(agent,), daemon=True).start()
-        Buddy(agent.handle, cfg.get("character", "duck"),
-              roam=cfg.get("roam", False), roam_speed=cfg.get("roam_speed", 40)).run()
+        buddy = Buddy(agent.handle, cfg.get("character", "duck"),
+                      roam=cfg.get("roam", False), roam_speed=cfg.get("roam_speed", 40))
+        if hasattr(agent, "on_state"):
+            agent.on_state = buddy.set_state          # show thinking/working/listening
+        buddy.run()
         return
 
     text_loop(agent)

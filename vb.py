@@ -42,8 +42,8 @@ def main():
     args = set(sys.argv[1:])
 
     if "--dashboard" in args:
-        import app
-        return app.App().run()
+        from buddy import dashboard          # modern webview panel (falls back to tkinter)
+        return dashboard.run()
 
     runtime = args & {"--character", "--voice", "--server", "--text"}
     if runtime:
@@ -58,8 +58,11 @@ def main():
     brain = make_brain(cfg)              # local Agent, or remote brain client (role: client)
     if _has_display():
         from buddy.character.character import Buddy
-        Buddy(brain.handle, cfg.get("character", "duck"),
-              roam=cfg.get("roam", False), roam_speed=cfg.get("roam_speed", 40)).run()
+        buddy = Buddy(brain.handle, cfg.get("character", "duck"),
+                      roam=cfg.get("roam", False), roam_speed=cfg.get("roam_speed", 40))
+        if hasattr(brain, "on_state"):
+            brain.on_state = buddy.set_state
+        buddy.run()
     else:
         import run
         run.text_loop(brain)
