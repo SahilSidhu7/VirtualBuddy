@@ -7,7 +7,13 @@ primitives so the planner (or a Claude-authored skill) can compose them.
 Gated by cfg.web_automation; degrades to an install hint if Playwright is missing.
 Actions that change page state (click, fill) are risk:confirm in the catalog.
 """
-import os, threading
+import os, sys, threading
+
+# In the packaged app Chromium is bundled inside the playwright package (built with
+# PLAYWRIGHT_BROWSERS_PATH=0), so point playwright there. In dev, leave the default
+# so the browser installed in the user cache is used.
+if getattr(sys, "frozen", False):
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
 
 _lock = threading.Lock()
 _pw = _browser = _page = None
