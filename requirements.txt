@@ -7,6 +7,7 @@ pyttsx3           # offline text-to-speech
 psutil            # system status, agents, serving
 pillow            # screenshots + character sprites
 pywebview         # modern dashboard window (uses the OS webview; tkinter fallback)
+playwright        # web automation primitives (open/read/click/fill); browser bundled in release
 
 # Intent embeddings come from Ollama (nomic-embed-text) - no torch needed.
 # Optional heavier fallback if you don't want to use Ollama for embeddings:
