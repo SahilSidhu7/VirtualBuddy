@@ -3,7 +3,7 @@
 ; Built automatically by CI (see .github/workflows/release.yml).
 
 #define AppName "VirtualBuddy"
-#define AppVer  "0.2.2"
+#define AppVer  "0.3.0"
 
 [Setup]
 AppName={#AppName}
