@@ -39,19 +39,27 @@ _NOISE_PROCS = {"system idle process", "system", "registry", "memory compression
                 "idle", "", "?"}
 
 
-def _top(ps, n=5, by="cpu"):
-    """Busiest processes, merged by name so 40 chrome tabs read as one line.
+# A full scan opens a handle per process (~360 here) and costs ~1.3s per pass on an
+# idle machine — but 10s+ when the box is genuinely busy, which is exactly when
+# someone asks what's slowing it down. So: cache briefly, skip the priming pass when
+# the counters are already warm, and bail out with a partial answer rather than hang.
+import threading
 
-    cpu_percent() is a delta since its own last call, so every process must be
-    primed and then re-read — a single pass reports 0% for everything.
-    """
-    # process_iter reuses its Process objects between calls, so the first pass primes
-    # the counters and the second reads real deltas. Batching the attrs in one call is
-    # far cheaper than querying each process field by field.
-    list(ps.process_iter(["cpu_percent"]))
-    # the second pass takes ~1s of wall clock on its own, which IS the measurement
-    # window — an extra sleep here only made the answer slower, not more accurate.
-    time.sleep(0.05)
+_SCAN_CACHE = {"ts": 0.0, "agg": {}}
+_SCAN_TTL = 8.0             # a fresh-enough answer to the same question
+_PRIME_TTL = 60.0           # psutil keeps its Process objects, so counters stay primed
+_scan_lock = threading.Lock()
+_refreshing = [False]
+
+
+def _full_scan(ps):
+    """One accurate pass. Never truncated — a partial scan ranks whichever
+    processes happened to come first, which is worse than being slow."""
+    if time.time() - _SCAN_CACHE["ts"] > _PRIME_TTL:
+        # cpu_percent() is a delta since its own last call — without a priming pass
+        # every process reports 0%. Recent scans leave the counters already primed.
+        list(ps.process_iter(["cpu_percent"]))
+        time.sleep(0.05)
     agg = {}
     for p in ps.process_iter(["name", "cpu_percent", "memory_info"]):
         try:
@@ -66,6 +74,62 @@ def _top(ps, n=5, by="cpu"):
         cur = agg.setdefault(name, [0.0, 0])
         cur[0] += cpu
         cur[1] += rss
+    _SCAN_CACHE.update({"ts": time.time(), "agg": agg})
+    return agg
+
+
+def _scan(ps):
+    """{name: [cpu, rss]}. Instant once warm; refreshes behind the answer.
+
+    A full pass opens a handle per process (~360 here): ~1.3s idle, but 10s+ when
+    the machine is genuinely busy — which is exactly when someone asks what's
+    slowing it down. So only the very first ask waits.
+    """
+    age = time.time() - _SCAN_CACHE["ts"]
+    if age < _SCAN_TTL and _SCAN_CACHE["agg"]:
+        return _SCAN_CACHE["agg"]
+    with _scan_lock:
+        start = not _refreshing[0]
+        if start:
+            _refreshing[0] = True
+    if start:
+        if not _SCAN_CACHE["agg"]:
+            try:                               # nothing cached yet: this one has to wait
+                return _full_scan(ps)
+            finally:
+                _refreshing[0] = False
+
+        def work():
+            try:
+                _full_scan(ps)
+            finally:
+                _refreshing[0] = False
+        threading.Thread(target=work, daemon=True).start()
+    elif not _SCAN_CACHE["agg"]:
+        # a scan (usually the startup warm-up) is already running — wait for it
+        # instead of kicking off a second one and doubling the work
+        for _ in range(200):
+            time.sleep(0.1)
+            if _SCAN_CACHE["agg"]:
+                break
+    return _SCAN_CACHE["agg"]
+
+
+def warm():
+    """Prime the process scan in the background so the first question is instant.
+
+    Called at startup. Without it the first "what's using my CPU" pays the whole
+    scan — 14s on a machine that's already struggling.
+    """
+    ps = _psutil()
+    if not ps or _SCAN_CACHE["agg"]:
+        return
+    threading.Thread(target=lambda: _full_scan(ps), daemon=True).start()
+
+
+def _top(ps, n=5, by="cpu"):
+    """Busiest processes, merged by name so 40 chrome tabs read as one line."""
+    agg = _scan(ps)
     cores = ps.cpu_count() or 1
     key = 0 if by == "cpu" else 1
     ranked = sorted(agg.items(), key=lambda kv: kv[1][key], reverse=True)
@@ -131,9 +195,13 @@ def pc_activity(text, ctx):
         parts.append(f"battery {batt.percent:.0f}% ({plug})")
     parts.append(f"up {_uptime(ps)}")
     lines = [", ".join(parts) + "."]
-    scan.join(timeout=4)
+    scan.join(timeout=6)
     if busy:
         lines.append("Busiest: " + ", ".join(busy) + ".")
+    else:
+        # a very busy machine can take longer to scan than we're willing to wait —
+        # say so instead of quietly dropping the line
+        lines.append("(Still working out which apps are busiest — ask again in a moment.)")
     front = _active_window()
     if front:
         lines.append(f"In front: {front}")

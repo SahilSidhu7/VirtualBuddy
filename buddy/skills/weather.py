@@ -19,7 +19,9 @@ def weather(text, ctx):
             data = json.load(r)
         cur = data["current_condition"][0]
         desc = cur["weatherDesc"][0]["value"]
-        return f"{city.title()}: {cur['temp_C']}Â°C, {desc}."
+        feels = cur.get("FeelsLikeC")
+        extra = f" (feels like {feels}°C)" if feels and feels != cur["temp_C"] else ""
+        return f"{city.title()}: {cur['temp_C']}°C{extra}, {desc}."
     except Exception as e:
         return f"Couldn't get weather for {city}: {e}"
 

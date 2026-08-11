@@ -1,7 +1,10 @@
 """Window and app control: close something, bring it to the front, clear the desktop."""
 import os, re, sys, subprocess
 
-from buddy import slots
+from buddy import confirm, slots
+
+# Editors mark unsaved work in the title: "*notes.txt - Notepad", "● file.py".
+_DIRTY_MARKS = ("*", "●", "•", "◆")
 
 # words that mean "the thing after this is the app name"
 _TARGET = re.compile(
@@ -60,6 +63,25 @@ def _matching_procs(name):
     return out
 
 
+def _has_unsaved(win):
+    try:
+        return (win.title or "").lstrip().startswith(_DIRTY_MARKS)
+    except Exception:
+        return False
+
+
+def _close_windows(wins, name):
+    closed = 0
+    for w in wins:
+        try:
+            w.close(); closed += 1
+        except Exception:
+            continue
+    if not closed:
+        return f"Couldn't close {name}."
+    return f"Closed {closed} {name} window{'s' if closed > 1 else ''}."
+
+
 def _active():
     try:
         import pygetwindow as gw
@@ -76,32 +98,45 @@ def close_app(text, ctx):
             if w is None:
                 return "I can't tell which window is in front."
             title = w.title
-            try:
-                w.close()
-                return f"Closed {title}."
-            except Exception as e:
-                return f"Couldn't close it: {e}"
+            if _has_unsaved(w):
+                return confirm.ask(f"{title} has unsaved changes. Close it anyway?",
+                                   lambda: _close_windows([w], title))
+            return _close_windows([w], title)
         return "Close what?"
     # prefer closing windows politely — that lets the app prompt to save
     wins = _matching_windows(name)
     if wins:
-        closed = 0
-        for w in wins:
-            try:
-                w.close(); closed += 1
-            except Exception:
-                continue
-        if closed:
-            return f"Closed {closed} {name} window{'s' if closed > 1 else ''}."
+        dirty = [w for w in wins if _has_unsaved(w)]
+        clean = [w for w in wins if w not in dirty]
+        if not dirty:
+            return _close_windows(clean, name)
+        # never quietly discard someone's work: modern editors keep one window for
+        # everything, so "close notepad" can mean "close the thing I was writing".
+        # Clean windows go now; only the unsaved ones need a decision.
+        done = _close_windows(clean, name) if clean else ""
+        titles = ", ".join(w.title.lstrip("".join(_DIRTY_MARKS)).strip() for w in dirty)
+        was = f"{done} " if clean else ""
+        return was + confirm.ask(
+            f"{titles} has unsaved changes — close that one too?",
+            lambda: _close_windows(dirty, name))
     procs = _matching_procs(name)
     if not procs:
         return f"I don't see {name} running."
-    for p in procs:
-        try:
-            p.terminate()
-        except Exception:
-            continue
-    return f"Closed {name} ({len(procs)} process{'es' if len(procs) > 1 else ''})."
+
+    # No window to close politely — the only option left is TerminateProcess, which
+    # on Windows kills outright with no chance to save. Always ask first.
+    def kill():
+        killed = 0
+        for p in procs:
+            try:
+                p.terminate(); killed += 1
+            except Exception:
+                continue
+        return f"Force-closed {name} ({killed} process{'es' if killed != 1 else ''})."
+
+    return confirm.ask(
+        f"{name} has no window I can close normally — force-quit it? "
+        f"Anything unsaved would be lost.", kill)
 
 
 def focus_app(text, ctx):
@@ -127,7 +162,9 @@ def focus_app(text, ctx):
 
 def minimize_all(text, ctx):
     t = slots.clean(text)
-    restore = any(w in t for w in ("restore", "bring back", "undo", "unminimize"))
+    # "bring my windows back" loses the adjacency of "bring back" once filler is
+    # stripped, so match the tell-tale words individually
+    restore = bool(re.search(r"\b(restore|back|undo|unminimi[sz]e|return|reopen)\b", t))
     if os.name == "nt":
         try:
             import ctypes
