@@ -29,6 +29,9 @@ def clf_path():
 
 _DEFAULTS = {
     "wake_word": "buddy",
+    # extra things the speech model hears instead of your wake word (it mangles
+    # short names). Built-in mishearings for "buddy" are already handled.
+    "wake_variants": [],
     "character": "duck",
     "match_threshold": 0.45,
     "speak_replies": True,
@@ -62,6 +65,9 @@ _DEFAULTS = {
     "ask_to_confirm_first_n": 5,      # buddy asks "did I do that right?" the first N times per skill
     # ---- v2: command-graph memory (similarity -> reuse a known-good skill) ----
     "command_memory": True,           # reuse the skill that worked for a similar past command
+    # "fast" = hashed n-grams in-process (instant). "embed" = the embedding model
+    # (slower by ~2s per command; only worth it if you want looser paraphrase matching).
+    "graph_vectors": "fast",
     "cmd_sim_hit": 0.82,              # cosine >= this to reuse a remembered command's skill
     "cmd_sim_dedup": 0.93,            # cosine >= this = same command, just strengthen it
     "teach_after_n_lessons": 25,      # queue a LoRA fine-tune once this many new lessons pile up

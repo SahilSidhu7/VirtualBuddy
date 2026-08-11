@@ -9,6 +9,11 @@ from buddy.settings import load
 from buddy.agent import make_brain
 
 def main():
+    for stream in (sys.stdout, sys.stderr):       # cp1252 consoles mangle em dashes
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     cfg = load()
     args = sys.argv[1:]
 

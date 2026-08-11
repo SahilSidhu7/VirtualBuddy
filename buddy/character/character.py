@@ -111,9 +111,12 @@ class Buddy:
         m = tk.Menu(self.root, tearoff=0)
         m.add_command(label="Ask buddy...", command=self._prompt)
         m.add_separator()
-        for label, cmd in (("What time is it", "what time is it"),
-                           ("System status", "system status"),
-                           ("What am I serving", "what is my pc serving"),
+        for label, cmd in (("What's happening on my PC", "what is happening on my pc"),
+                           ("What's using my CPU", "what is using my cpu"),
+                           ("What's open", "what apps do i have open"),
+                           ("Disk space", "how much disk space do i have"),
+                           ("Recent downloads", "what did i just download"),
+                           ("What time is it", "what time is it"),
                            ("Take a screenshot", "take a screenshot")):
             m.add_command(label=label, command=lambda c=cmd: self._dispatch(c))
         m.add_separator()

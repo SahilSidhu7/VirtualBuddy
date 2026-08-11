@@ -29,9 +29,11 @@ jobs:
         run: >
           pyinstaller vb.py --name VirtualBuddy --noconfirm --windowed
           --collect-submodules buddy --collect-submodules tools
-          --collect-all playwright --collect-all pywebview
+          --collect-all playwright --collect-all webview
           --hidden-import run --hidden-import app
+          --hidden-import pyperclip --hidden-import pygetwindow
           --add-data "assets;assets" --add-data "config.yaml;."
+          --add-data "buddy/dashboard/index.html;buddy/dashboard"
       - name: Build Windows installer (Inno Setup)
         run: |
           choco install innosetup -y --no-progress
@@ -61,9 +63,11 @@ jobs:
         run: >
           pyinstaller vb.py --name VirtualBuddy --noconfirm --windowed
           --collect-submodules buddy --collect-submodules tools
-          --collect-all playwright --collect-all pywebview
+          --collect-all playwright --collect-all webview
           --hidden-import run --hidden-import app
+          --hidden-import pyperclip --hidden-import pygetwindow
           --add-data "assets:assets" --add-data "config.yaml:."
+          --add-data "buddy/dashboard/index.html:buddy/dashboard"
       - name: Package (tar.gz)
         run: |
           cd dist && tar czf VirtualBuddy-linux.tar.gz VirtualBuddy && cd ..

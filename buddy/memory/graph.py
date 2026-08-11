@@ -19,7 +19,7 @@ up — so "using buddy" and "training buddy" become the same act.
 import os, json, time, uuid
 import numpy as np
 
-from buddy import embedder, settings
+from buddy import embedder, settings, textvec
 
 
 def _cos(mat, q):
@@ -41,6 +41,9 @@ class CommandGraph:
         self.path = os.path.join(settings.memory_dir(), "command_graph.json")
         self.hit = float(cfg.get("cmd_sim_hit", 0.82))      # >= this to reuse a known skill
         self.dedup = float(cfg.get("cmd_sim_dedup", 0.93))   # >= this = same command, just bump
+        # fast mode: hashed n-grams in-process (default). Calling an embedding model
+        # here cost ~2s per command and was buddy's worst source of lag.
+        self.fast = cfg.get("graph_vectors", "fast") != "embed" and textvec.available()
         self.nodes = []
         self.skills = {}
         self._mat = None
@@ -59,6 +62,10 @@ class CommandGraph:
         self._rebuild_matrix()
 
     def _rebuild_matrix(self):
+        if self.fast:
+            # vectors are recomputed from text — instant, and nothing to keep in the file
+            self._mat = textvec.encode([n["text"] for n in self.nodes]) if self.nodes else None
+            return
         vecs = [n.get("vec") for n in self.nodes if n.get("vec")]
         if vecs and len(vecs) == len(self.nodes):
             self._mat = np.asarray(vecs, dtype="float32")
@@ -73,6 +80,8 @@ class CommandGraph:
         os.replace(tmp, self.path)
 
     def _embed(self, text):
+        if self.fast:
+            return textvec.encode(text)[0]
         try:
             if embedder.available(self.cfg):
                 return embedder.embed([text], self.cfg)[0].astype("float32")
@@ -117,13 +126,17 @@ class CommandGraph:
         vec = self._embed(text)
         # find an existing node for the SAME skill that's basically this command
         best_i, best_s = None, 0.0
-        for i, n in enumerate(self.nodes):
-            if n["skill"] != skill:
-                continue
-            s = (float(_cos(np.asarray([n["vec"]], dtype="float32"), vec)[0])
-                 if (vec is not None and n.get("vec")) else _overlap(n["text"], text))
-            if s > best_s:
-                best_i, best_s = i, s
+        same_skill = [i for i, n in enumerate(self.nodes) if n["skill"] == skill]
+        if same_skill and vec is not None and self._mat is not None \
+                and self._mat.shape[0] == len(self.nodes):
+            sims = _cos(self._mat[same_skill], vec)
+            j = int(np.argmax(sims))
+            best_i, best_s = same_skill[j], float(sims[j])
+        else:
+            for i in same_skill:
+                s = _overlap(self.nodes[i]["text"], text)
+                if s > best_s:
+                    best_i, best_s = i, s
         if best_i is not None and best_s >= self.dedup:
             self.nodes[best_i]["ok" if ok else "bad"] += 1
             self.nodes[best_i]["ts"] = time.time()
@@ -131,7 +144,9 @@ class CommandGraph:
             self.nodes.append({
                 "id": uuid.uuid4().hex[:12], "text": text, "skill": skill,
                 "ok": 1 if ok else 0, "bad": 0 if ok else 1,
-                "vec": vec.tolist() if vec is not None else None, "ts": time.time(),
+                # fast vectors are recomputed from text on load — don't bloat the file
+                "vec": None if self.fast else (vec.tolist() if vec is not None else None),
+                "ts": time.time(),
             })
             self._rebuild_matrix()
         tally = self.skills.setdefault(skill, {"ok": 0, "bad": 0})

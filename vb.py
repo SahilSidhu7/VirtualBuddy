@@ -10,6 +10,13 @@
 import os, sys
 
 def _setup_logging():
+    # Windows consoles default to cp1252, which mangles the em dashes and arrows
+    # buddy's replies are full of. UTF-8 with replacement keeps output readable.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     # windowed .exe has no console -> stdout/stderr are None; print() would crash.
     if sys.stdout is None or sys.stderr is None:
         from buddy import settings

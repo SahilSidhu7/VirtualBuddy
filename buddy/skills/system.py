@@ -41,7 +41,13 @@ def _screenshot(text, ctx):
         return f"Screenshot failed: {e}"
 
 SKILLS = [
-    {"name": "open_app", "phrases": ["open notepad", "launch chrome", "start an app", "open calculator"], "run": _open_app},
+    {"name": "open_app", "phrases": ["open notepad", "launch chrome", "start an app", "open calculator",
+                                     "start spotify", "fire up vs code", "boot up discord",
+                                     "run the calculator app", "get me notepad open",
+                                     "launch the file explorer", "open steam", "open discord",
+                                     "open word", "open excel", "open outlook", "open obs",
+                                     "open telegram", "open whatsapp", "open figma",
+                                     "open slack"], "run": _open_app},
     {"name": "time", "phrases": ["what time is it", "tell me the time", "current time", "what is the date"], "run": _time},
     {"name": "lock", "phrases": ["lock my pc", "lock the screen", "lock computer", "lock in 5 minutes"], "run": _lock},
     {"name": "screenshot", "phrases": ["take a screenshot", "capture the screen", "grab screen"], "run": _screenshot},

@@ -20,6 +20,30 @@ Your settings + trained model live in **`~/.virtualbuddy/`** (config.yaml, works
 models, data) — so they survive updates and work for the installed app. First launch
 offers to train the brain; it works immediately either way.
 
+## What you can ask it
+Everyday things, by typing or by voice ("buddy, ..."):
+
+| You say | Buddy does |
+|---|---|
+| "open chrome", "fire up vs code" | launches the app |
+| "close spotify", "switch to my browser", "show my desktop" | window control |
+| "search youtube for lofi", "google how to boil an egg" | searches that site in a real browser |
+| "open youtube", "take me to gmail" | opens the site |
+| "who won the world cup", "what's the weather in delhi" | free web lookup, answered in place |
+| **"what's happening on my pc"** | CPU, memory, disk, battery, uptime, busiest apps, what's in front |
+| "what's using my cpu", "what's eating my ram" | top processes, merged by app |
+| "what apps do i have open" | list of open windows |
+| "how much disk space do i have", "am i online" | drives / connection + live speed |
+| "open my downloads", "where is my resume", "what did i just download" | folders and file search |
+| "turn the volume down", "mute", "pause the music", "next track" | volume + media keys |
+| "set a timer for 5 minutes", "remind me in an hour to stretch" | timers and reminders |
+| "what's on my clipboard", "save my clipboard to a file" | clipboard |
+| "shut down my pc", "restart", "sleep", "sign me out" | **asks yes/no first**, then does it |
+| "lock my screen", "take a screenshot", "what time is it" | the basics |
+
+Anything buddy doesn't know yet goes to the planner (composes primitives), then
+the local LLM, then a free web search — and only then to Claude, if you opted in.
+
 ## Characters
 duck · robot · crab · elf (pixel-art). Pick in the control panel or set
 `character:` in config.yaml. Add your own: a folder in `assets/character/<name>/`
@@ -103,12 +127,21 @@ and the default target are set in the Sync tab or `config.yaml`
 (`peers:` + `default_peer:`).
 
 ## Buddy learns your commands
-Every time buddy runs a command it remembers what worked (an embedding-indexed
-command→skill graph under `~/.virtualbuddy/memory/`). Next time you say something
-similar, it reuses the skill that worked before instead of re-guessing — so it
-gets more *yours* the more you use it. Early on it asks "did I get that right?";
-your yes/no tunes the memory. Confirmed commands also become the training set the
-fine-tuner batches up (`command_memory: true` to toggle).
+Every time buddy runs a command it remembers what worked (a command→skill graph
+under `~/.virtualbuddy/memory/`). Next time you say something similar, it reuses
+the skill that worked before instead of re-guessing — so it gets more *yours* the
+more you use it. Early on it asks "did I get that right?"; your yes/no tunes the
+memory. Confirmed commands also become the training set the fine-tuner batches up
+(`command_memory: true` to toggle).
+
+Matching uses hashed n-grams computed in-process, so recall is instant. Set
+`graph_vectors: embed` if you'd rather pay ~2s per command for looser paraphrase
+matching from the embedding model.
+
+## Dashboard
+`vb --dashboard` (or the character's right-click menu) opens the control panel:
+a chat box that talks to buddy directly — type, or press 🎙 and speak one command —
+plus character picker, settings, sync, and the advanced training tools.
 
 ## Power-saving mode
 Frees resources: unloads the LLM from RAM, skips it entirely. Skills, web
@@ -144,6 +177,10 @@ The loop feeds misses back to the builder until accuracy is high:
 ```
 python -m tools.loop            # target 95%, up to 6 rounds
 python -m tools.loop 0.9 4      # custom target / rounds
+```
+Check it still understands the everyday commands (routing only — never runs them):
+```
+python -m tools.selftest
 ```
 Output -> `models/intent_clf.joblib`. The brain auto-uses it if present.
 Hit 99% on first round with the starter skills. All local, offline, free.

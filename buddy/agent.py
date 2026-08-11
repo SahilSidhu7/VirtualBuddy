@@ -8,7 +8,9 @@ Fallback order (cheapest first, saves Claude tokens):
 
 Power-saving mode skips the LLM entirely and frees its RAM.
 """
-from buddy import brain, voice, llm, tools_llm, planner, skill_writer, peers as peer_book
+import threading
+
+from buddy import brain, voice, llm, tools_llm, planner, skill_writer, confirm, peers as peer_book
 from buddy.skills.web import search as web_search
 from buddy.skills.claude_ctl import ask_claude
 from buddy.skills.remote import remote as remote_relay
@@ -78,6 +80,12 @@ class Agent:
             if reply is not None:
                 voice.say(reply, self.cfg["speak_replies"])
                 return reply
+        # is this a yes/no answer to a risky action a skill is holding? (shutdown, etc.)
+        if confirm.Pending.active() and confirm.is_verdict(text):
+            reply = confirm.resolve(text)
+            if reply is not None:
+                voice.say(reply, self.cfg["speak_replies"])
+                return reply
         # is this a yes/no answer to a pending plan buddy asked to confirm?
         if planner.Pending.active() and planner.is_verdict(text):
             reply = planner.confirm(text, self.ctx)
@@ -108,8 +116,8 @@ class Agent:
             self.last = (text, skill["name"])
             self._emit("working")                       # a known task is running
             reply = skill["run"](text, self.ctx)
-            self.mem.note_episode(f"'{text}' -> {skill['name']}")
-            self.cmdgraph.record(text, skill["name"], ok=True)   # learn from doing
+            # remembering is a write nobody waits on — keep it off the reply path
+            self._remember_async(text, skill["name"])
             if source == "classifier":                  # only quiz on fresh (unlearned) routes
                 reply = self._maybe_confirm(skill["name"], text, reply)
         else:
@@ -117,6 +125,23 @@ class Agent:
             reply = self._fallback(text)
         voice.say(reply, self.cfg["speak_replies"])
         return reply
+
+    def _remember_async(self, text, skill_name):
+        """Log the episode and reinforce command -> skill in the background.
+
+        These used to run inline; with an embedding-backed store that added
+        seconds to every single reply.
+        """
+        def work():
+            try:
+                self.mem.note_episode(f"'{text}' -> {skill_name}")
+            except Exception:
+                pass
+            try:
+                self.cmdgraph.record(text, skill_name, ok=True)   # learn from doing
+            except Exception:
+                pass
+        threading.Thread(target=work, daemon=True).start()
 
     def _skill_from_memory(self, text):
         """If the command graph confidently knows this command, return its skill."""

@@ -23,6 +23,39 @@ class Api:
 
     def __init__(self):
         self.cfg = settings.load()
+        self._brain = None                  # built on first command, so the window opens fast
+
+    # ---- talking to buddy ----
+    def _agent(self):
+        if self._brain is None:
+            from buddy.agent import make_brain
+            self._brain = make_brain(self.cfg)
+        return self._brain
+
+    def ask(self, text):
+        """Run a command and return buddy's reply. This is the dashboard's chat box."""
+        text = (text or "").strip()
+        if not text:
+            return {"ok": False, "reply": ""}
+        try:
+            return {"ok": True, "reply": str(self._agent().handle(text))}
+        except Exception as e:
+            return {"ok": False, "reply": f"That went wrong: {e}"}
+
+    def voice_status(self):
+        from buddy import listener
+        return {"ok": listener.available(), "why": listener.why_unavailable() or ""}
+
+    def listen(self, seconds=6):
+        """Record one spoken command and return the transcript (does not run it)."""
+        from buddy import listener
+        try:
+            heard = listener.listen_once(self.cfg, seconds)
+        except Exception as e:
+            return {"ok": False, "text": "", "why": f"Microphone failed: {e}"}
+        if not heard:
+            return {"ok": False, "text": "", "why": "I didn't catch that."}
+        return {"ok": True, "text": heard, "why": ""}
 
     # ---- config ----
     def get_config(self):
@@ -220,15 +253,37 @@ class Api:
         return {"ok": True}
 
 
+def _html_path():
+    """Where index.html actually is. Frozen builds unpack it under _MEIPASS."""
+    for p in (HTML,
+              os.path.join(getattr(sys, "_MEIPASS", ""), "buddy", "dashboard", "index.html"),
+              os.path.join(_ROOT, "buddy", "dashboard", "index.html")):
+        if p and os.path.exists(p):
+            return p
+    return None
+
+
+def _fallback(reason):
+    print(f"[dashboard] {reason} — using the basic panel.")
+    import app
+    return app.App().run()
+
+
 def run():
-    """Open the dashboard. Falls back to the tkinter panel if webview is missing."""
+    """Open the dashboard. Falls back to the tkinter panel if the webview can't run."""
     try:
         import webview
-    except Exception:
-        import app
-        return app.App().run()
+    except Exception as e:
+        return _fallback(f"pywebview unavailable ({e})")
+    page = _html_path()
+    if not page:
+        # a packaged build that forgot to ship index.html would otherwise show a blank window
+        return _fallback("dashboard page missing from this build")
     api = Api()
-    webview.create_window("VirtualBuddy", url=HTML, js_api=api,
-                          width=920, height=720, min_size=(820, 620),
-                          background_color="#1c1810")
-    webview.start()
+    try:
+        webview.create_window("VirtualBuddy", url=page, js_api=api,
+                              width=980, height=760, min_size=(820, 620),
+                              background_color="#1c1810")
+        webview.start()
+    except Exception as e:
+        return _fallback(f"webview failed to start ({e})")

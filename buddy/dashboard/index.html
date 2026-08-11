@@ -80,6 +80,24 @@
     box-shadow:var(--sh);opacity:0;transition:.25s;pointer-events:none}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .skills{font-size:12px;color:var(--mut);max-height:130px;overflow:auto;margin-top:8px}
+  /* chat */
+  .chat{display:flex;flex-direction:column;gap:10px}
+  .log{max-height:260px;min-height:64px;overflow:auto;display:flex;flex-direction:column;gap:8px;
+    padding:4px 2px}
+  .msg{max-width:82%;padding:9px 13px;border-radius:14px;font-size:14px;white-space:pre-wrap;
+    word-break:break-word;line-height:1.45}
+  .msg.me{align-self:flex-end;background:linear-gradient(135deg,var(--acc),var(--acc2));color:var(--acc-ink)}
+  .msg.buddy{align-self:flex-start;background:var(--card2);border:1px solid var(--edge)}
+  .msg.err{align-self:flex-start;background:#3a1e14;border:1px solid var(--danger);color:#ffd9cc}
+  .askrow{display:flex;gap:9px;align-items:center}
+  .askrow input{flex:1}
+  .mic{width:46px;padding:0;height:42px;display:grid;place-items:center;font-size:18px}
+  .mic.rec{background:linear-gradient(135deg,#ff6b6b,#ff9f6b);color:#2a0e00;border:0;
+    animation:pulse 1s infinite}
+  @keyframes pulse{50%{filter:brightness(1.25)}}
+  .empty{color:var(--mut);font-size:13px;padding:6px 2px}
+  .banner{background:#3a1e14;border:1px solid var(--danger);color:#ffd9cc;padding:11px 14px;
+    border-radius:12px;margin-bottom:16px;font-size:13px;display:none}
 </style>
 </head>
 <body>
@@ -91,7 +109,26 @@
     </div>
   </header>
 
+  <div class="banner" id="banner"></div>
+
   <div class="grid">
+    <!-- TALK TO BUDDY -->
+    <section class="card span2">
+      <h2>Ask buddy</h2>
+      <div class="chat">
+        <div class="log" id="chatlog">
+          <div class="empty" id="chat-empty">Try: “what’s happening on my pc”, “open chrome”,
+            “search youtube for lofi”, “set a timer for 5 minutes”.</div>
+        </div>
+        <div class="askrow">
+          <input type="text" id="in-ask" placeholder="Type a command, or press the mic and speak…"
+                 autocomplete="off">
+          <button class="mic" id="btn-mic" title="Speak a command">🎙</button>
+          <button class="primary" id="btn-ask">Send</button>
+        </div>
+      </div>
+    </section>
+
     <!-- START -->
     <section class="card span2">
       <h2>Start buddy</h2>
@@ -242,6 +279,45 @@
   function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show");
     clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),1800); }
 
+  function banner(msg){ const b=$("#banner"); b.textContent=msg; b.style.display="block"; }
+
+  // ---- chat ----
+  function bubble(text, who){
+    const empty=$("#chat-empty"); if(empty) empty.remove();
+    const d=document.createElement("div");
+    d.className="msg "+who; d.textContent=text;
+    const log=$("#chatlog"); log.appendChild(d); log.scrollTop=log.scrollHeight;
+    return d;
+  }
+
+  async function send(text){
+    text=(text||"").trim(); if(!text) return;
+    $("#in-ask").value="";
+    bubble(text,"me");
+    const thinking=bubble("…","buddy");
+    try{
+      const r=await api().ask(text);
+      thinking.textContent=r.reply || "(no reply)";
+      if(!r.ok) thinking.className="msg err";
+    }catch(e){
+      thinking.className="msg err"; thinking.textContent="Couldn't reach buddy: "+e;
+    }
+  }
+
+  async function micClick(){
+    const b=$("#btn-mic");
+    if(b.classList.contains("rec")) return;          // already listening
+    const st=await api().voice_status();
+    if(!st.ok){ toast(st.why||"Voice not set up."); return; }
+    b.classList.add("rec"); b.textContent="●";
+    try{
+      const r=await api().listen(6);
+      if(r.ok){ await send(r.text); }
+      else toast(r.why||"Didn't catch that.");
+    }catch(e){ toast("Microphone failed: "+e); }
+    finally{ b.classList.remove("rec"); b.textContent="🎙"; }
+  }
+
   async function init(){
     cfg = await api().get_config();
     chosenChar = cfg.character;
@@ -364,8 +440,27 @@
     toast(r.msg);
     if(r.ok){ $("#in-skill").value=""; setTimeout(loadSkills, 1500); }
   };
+  $("#btn-ask").onclick = ()=> send($("#in-ask").value);
+  $("#in-ask").addEventListener("keydown", e=>{ if(e.key==="Enter") send($("#in-ask").value); });
+  $("#btn-mic").onclick = micClick;
 
-  window.addEventListener("pywebviewready", init);
+  // Start up even if the ready event already fired before this script ran — that
+  // race is what left the dashboard blank. Poll for the bridge, then init once.
+  let started = false;
+  async function start(){
+    if(started) return; started = true;
+    try{ await init(); }
+    catch(e){ banner("The dashboard couldn't load its settings: "+e+
+                     "  (buddy still works — try the text console)"); }
+  }
+  function waitForBridge(tries){
+    if(window.pywebview && window.pywebview.api){ start(); return; }
+    if(tries <= 0){ banner("Couldn't connect to buddy's backend. Close and reopen the dashboard."); return; }
+    setTimeout(()=>waitForBridge(tries-1), 100);
+  }
+  window.addEventListener("pywebviewready", start);
+  waitForBridge(80);                                   // ~8s of grace, then say so
+  window.addEventListener("error", e => banner("Dashboard error: "+e.message));
 </script>
 </body>
 </html>
