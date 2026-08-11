@@ -146,6 +146,11 @@
         <div><label class="lbl">Buddy talks back</label><div class="hint">Speak replies out loud.</div></div>
         <label class="sw"><input type="checkbox" id="sw-speak"><span></span></label>
       </div>
+      <div class="row" id="row-voice">
+        <div><label class="lbl">Voice input</label>
+          <div class="hint" id="voice-hint">Checking…</div></div>
+        <button id="btn-voicesetup" style="display:none">Set up voice</button>
+      </div>
       <div class="flex" style="margin-top:14px">
         <button class="primary big" id="btn-start">▶  Start buddy</button>
         <button id="btn-console">Open text console</button>
@@ -318,6 +323,27 @@
     finally{ b.classList.remove("rec"); b.textContent="🎙"; }
   }
 
+  async function refreshVoice(){
+    let st;
+    try{ st = await api().voice_status(); }catch(e){ return; }
+    const hint=$("#voice-hint"), btn=$("#btn-voicesetup");
+    if(st.ok){
+      hint.textContent = "Ready — press 🎙 above, or say your wake word in voice mode.";
+      btn.style.display="none";
+      return;
+    }
+    if(st.running){
+      hint.textContent = `Downloading the speech model… ${st.percent}%`;
+      btn.style.display="none";
+      setTimeout(refreshVoice, 1200);
+      return;
+    }
+    hint.textContent = st.error ? ("Download failed: "+st.error)
+                                : (st.why || "Not set up yet.");
+    btn.style.display="";
+    btn.textContent = st.error ? "Try again" : "Set up voice (~40MB)";
+  }
+
   async function init(){
     cfg = await api().get_config();
     chosenChar = cfg.character;
@@ -341,6 +367,7 @@
     await loadChars();
     await loadSync();
     loadSkills();
+    refreshVoice();
   }
 
   async function loadChars(){
@@ -443,6 +470,10 @@
   $("#btn-ask").onclick = ()=> send($("#in-ask").value);
   $("#in-ask").addEventListener("keydown", e=>{ if(e.key==="Enter") send($("#in-ask").value); });
   $("#btn-mic").onclick = micClick;
+  $("#btn-voicesetup").onclick = async()=>{
+    const r = await api().setup_voice();
+    toast(r.msg); refreshVoice();
+  };
 
   // Start up even if the ready event already fired before this script ran — that
   // race is what left the dashboard blank. Poll for the bridge, then init once.

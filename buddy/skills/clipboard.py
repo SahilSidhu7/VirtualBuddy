@@ -31,16 +31,27 @@ def read_clipboard(text, ctx):
     return f"Clipboard: {data}"
 
 
+def _value(text):
+    """The text the user wants copied, with the instruction words stripped off."""
+    val = slots.quoted(text)
+    if val:
+        return val
+    m = re.search(r"\b(?:copy|put|set)\s+(.+)$", text, re.I)
+    if not m:
+        return None
+    val = m.group(1)
+    # "...to my clipboard" / "on the clipboard" / "my clipboard to" all trail the value
+    val = re.sub(r"\b(?:in|on|to)\s+(?:the|my|your)?\s*clipboard\b.*$", "", val, flags=re.I)
+    val = re.sub(r"^\s*(?:my|the)?\s*clipboard\s+to\s+", "", val, flags=re.I)
+    val = re.sub(r"^\s*(?:this|that|it)\s+", "", val, flags=re.I)
+    return re.sub(r"\s+", " ", val).strip(" .,") or None
+
+
 def set_clipboard(text, ctx):
     pc = _clip()
     if not pc:
         return "Need pyperclip for clipboard access (pip install pyperclip)."
-    val = slots.quoted(text)
-    if not val:
-        m = re.search(r"\b(?:copy|put|clipboard(?:\s+to)?)\s+(.+)$", text, re.I)
-        val = m.group(1).strip() if m else None
-        if val:
-            val = re.sub(r"\b(to (the )?clipboard|on (the )?clipboard)\b", "", val, flags=re.I).strip()
+    val = _value(text)
     if not val:
         return "Copy what? Try: copy \"some text\" to the clipboard."
     try:

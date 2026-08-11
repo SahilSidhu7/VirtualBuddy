@@ -15,11 +15,11 @@ def sh(*args):
     return subprocess.run(args, cwd=ROOT).returncode
 
 def pip_install():
-    print("[1/3] installing Python packages...")
+    print("[1/4] installing Python packages...")
     sh(sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-q")
 
 def check_ollama():
-    print("[2/3] checking local brain (Ollama)...")
+    print("[2/4] checking local brain (Ollama)...")
     try:
         urllib.request.urlopen("http://localhost:11434/api/tags", timeout=2).read()
         print("      Ollama running. Good.")
@@ -28,7 +28,7 @@ def check_ollama():
         print("        ollama pull qwen2.5   (or any model; set it in config.yaml)")
 
 def get_voice():
-    print("[3/3] downloading offline voice model (~40MB)...")
+    print("[4/4] downloading offline voice model (~40MB)...")
     models = os.path.join(ROOT, "models")
     os.makedirs(models, exist_ok=True)
     if os.path.isdir(os.path.join(models, "vosk")):

@@ -18,6 +18,44 @@ HTML = os.path.join(_HERE, "index.html")
 ASSETS = os.path.join(_ROOT, "assets", "character")
 
 
+VOSK_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+
+# progress of the one-off speech-model download, polled by the page
+_voice_setup = {"running": False, "percent": 0, "error": ""}
+
+
+def _download_voice_model():
+    """Fetch + unzip the Vosk model into ~/.virtualbuddy/models/vosk."""
+    import urllib.request, zipfile, tempfile, shutil
+    _voice_setup.update({"running": True, "percent": 0, "error": ""})
+    try:
+        models = os.path.join(settings.HOME, "models")
+        os.makedirs(models, exist_ok=True)
+        dest = os.path.join(models, "vosk")
+        if os.path.isdir(dest):
+            _voice_setup.update({"running": False, "percent": 100})
+            return
+
+        def hook(blocks, block_size, total):
+            if total > 0:
+                _voice_setup["percent"] = min(99, int(blocks * block_size * 100 / total))
+
+        zip_path = os.path.join(tempfile.gettempdir(), "vb_vosk.zip")
+        urllib.request.urlretrieve(VOSK_URL, zip_path, reporthook=hook)
+        staging = os.path.join(models, "_vosk_unzip")
+        shutil.rmtree(staging, ignore_errors=True)
+        with zipfile.ZipFile(zip_path) as z:
+            z.extractall(staging)
+        inner = [n for n in os.listdir(staging) if n.startswith("vosk-model")]
+        # the zip holds one vosk-model-* folder; move it into place as "vosk"
+        shutil.move(os.path.join(staging, inner[0]) if inner else staging, dest)
+        shutil.rmtree(staging, ignore_errors=True)
+        os.remove(zip_path)
+        _voice_setup.update({"running": False, "percent": 100})
+    except Exception as e:
+        _voice_setup.update({"running": False, "percent": 0, "error": str(e)})
+
+
 class Api:
     """Everything the page can call. All returns are JSON-serializable."""
 
@@ -44,7 +82,24 @@ class Api:
 
     def voice_status(self):
         from buddy import listener
-        return {"ok": listener.available(), "why": listener.why_unavailable() or ""}
+        state = dict(_voice_setup)                 # progress of a download, if one is running
+        state.update({"ok": listener.available(),
+                      "why": listener.why_unavailable() or ""})
+        return state
+
+    def setup_voice(self):
+        """Download the offline speech model (~40MB) into the user folder.
+
+        The installed app can't run install.py --voice, so without this every
+        packaged user was stuck with text only.
+        """
+        from buddy import listener
+        if listener.available():
+            return {"ok": True, "msg": "Voice is already set up."}
+        if _voice_setup.get("running"):
+            return {"ok": True, "msg": "Already downloading…"}
+        threading.Thread(target=_download_voice_model, daemon=True).start()
+        return {"ok": True, "msg": "Downloading the speech model (~40MB)…"}
 
     def listen(self, seconds=6):
         """Record one spoken command and return the transcript (does not run it)."""
