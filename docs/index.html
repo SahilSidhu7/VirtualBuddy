@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VirtualBuddy — a small assistant that lives on your desktop</title>
+<meta name="description" content="A pixel companion that searches and scrapes the web, indexes your PC into a graph, edits your files and manages your tasks. Free, offline, no API keys.">
+<meta property="og:title" content="VirtualBuddy">
+<meta property="og:description" content="A small assistant that lives on your desktop. Researches the web, knows where your files are, runs your errands. Free and offline.">
+<meta property="og:type" content="website">
+<link rel="icon" href="img/character/duck/idle_0.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="shell">
+    <span class="brand"><img data-avatar-img src="img/character/duck/idle_0.png" alt="">VirtualBuddy</span>
+    <nav>
+      <span class="links" style="display:flex; gap:1.5rem">
+        <a href="#demo">Demo</a>
+        <a href="#does">What it does</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/SahilSidhu7/VirtualBuddy">GitHub</a>
+      </span>
+      <div class="picker" role="group" aria-label="Choose your buddy">
+        <button data-pick="duck" aria-pressed="true" title="Duck"><img src="img/character/duck/idle_0.png" alt="Duck"></button>
+        <button data-pick="elf" aria-pressed="false" title="Elf"><img src="img/character/elf/idle_0.png" alt="Elf"></button>
+        <button data-pick="crab" aria-pressed="false" title="Crab"><img src="img/character/crab/idle_0.png" alt="Crab"></button>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="shell">
+    <div>
+      <h1>A small assistant that <em>lives on your desktop</em>.</h1>
+      <p class="lede">It researches the web, knows where every one of your files is, edits them, and tells you what is eating your CPU. Free, offline, no API keys.</p>
+      <div class="cta">
+        <a class="btn primary" href="#install">Install it</a>
+        <a class="btn" href="#demo">Try the router below</a>
+      </div>
+      <div class="stat-strip">
+        <div class="stat"><b>26</b><span>skills, no cloud</span></div>
+        <div class="stat"><b>2.7s</b><span>to index 48,000 files</span></div>
+        <div class="stat"><b>$0</b><span>forever, no account</span></div>
+      </div>
+    </div>
+    <div class="stage">
+      <span class="bubble"></span>
+      <img class="buddy" src="img/character/duck/idle_0.png" alt="Your pixel buddy. Click to poke it." width="256" height="256">
+    </div>
+  </div>
+</section>
+
+<div class="strip">
+  <div class="track">
+    <span>research a topic</span><span>find my tax pdf</span><span>what's eating my disk space</span>
+    <span>read this link</span><span>add a line to notes.txt</span><span>what's using my cpu</span>
+    <span>remind me to call the dentist</span><span>what did i work on today</span>
+    <span>open chrome</span><span>what's in my downloads</span><span>index my pc</span>
+    <span>check my battery</span>
+    <span>research a topic</span><span>find my tax pdf</span><span>what's eating my disk space</span>
+    <span>read this link</span><span>add a line to notes.txt</span><span>what's using my cpu</span>
+    <span>remind me to call the dentist</span><span>what did i work on today</span>
+    <span>open chrome</span><span>what's in my downloads</span><span>index my pc</span>
+    <span>check my battery</span>
+  </div>
+</div>
+
+<section id="demo">
+  <div class="shell">
+    <div class="demo-grid">
+      <div class="reveal">
+        <h2>Say it however you say it.</h2>
+        <p class="dim" style="margin-top:1rem">Every skill declares the phrasings it answers to. Your words get scored against all of them, and the best one wins. This box runs that same scoring in your browser, so the match below is real, not a script.</p>
+        <div class="tries">
+          <button>research the best budget monitors</button>
+          <button>where did i put my resume</button>
+          <button>what's eating my disk space</button>
+          <button>why is my pc slow</button>
+          <button>remind me to call the dentist tomorrow</button>
+          <button>add a line to notes.txt saying call mum</button>
+        </div>
+        <p class="faint" style="margin-top:1.4rem; font-size:.86rem">Results are samples. The matching is the real thing.</p>
+      </div>
+
+      <div class="panel reveal">
+        <div class="panel-bar">
+          <img data-avatar-img src="img/character/duck/idle_0.png" alt="" width="20" height="20" style="image-rendering:pixelated">
+          <b>VirtualBuddy</b>
+          <span class="mode">Manual</span>
+        </div>
+        <div class="well">
+          <span class="caret">›</span>
+          <input id="ask" type="text" placeholder="ask for anything…" autocomplete="off" spellcheck="false" aria-label="Ask the buddy">
+          <button class="btn primary" id="run">Ask</button>
+        </div>
+        <div class="match" style="visibility:hidden">
+          <span class="who"><b>research</b><span>topic=</span></span>
+          <span class="meter"><span class="track"><span class="fill"></span></span><span class="val">0.00</span></span>
+        </div>
+        <div class="out"><b class="head">Type something, or pick a phrase.</b>The router will show you which skill it picked and how sure it is.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="does">
+  <div class="shell">
+    <h2 class="reveal">Four things it is actually good at.</h2>
+    <div class="bento">
+      <div class="cell wide lit reveal">
+        <h3>It reads the web for you</h3>
+        <p>Search, scrape and research across several sites at once. Plain HTTP first because it is fast, and a real Chromium only when a page is JavaScript-only or wants clicking. No keys, no quota, nothing to sign up for.</p>
+        <ul>
+          <li>research the best budget monitors</li>
+          <li>summarise this link</li>
+          <li>get all the links from that page</li>
+        </ul>
+      </div>
+      <div class="cell narrow reveal">
+        <div class="big">2.7s</div>
+        <p style="margin-top:.7rem">to walk 48,787 files into a graph of folders and files. Ask it anything about your own machine afterwards.</p>
+      </div>
+      <div class="cell half reveal">
+        <h3>It knows your PC</h3>
+        <p>Where that file went, what is eating your disk, what you touched today, what is in a folder without opening it.</p>
+        <ul>
+          <li>where did i put my resume</li>
+          <li>what's eating my disk space</li>
+          <li>what did i work on today</li>
+        </ul>
+      </div>
+      <div class="cell half reveal">
+        <h3>It writes and runs things</h3>
+        <p>Create folders, write and edit files, close a program that is hogging the CPU, keep your to-do list. It never touches Windows or Program Files, never overwrites without being asked, and deleting goes to the Recycle Bin.</p>
+        <ul>
+          <li>add a line to notes.txt saying call mum</li>
+          <li>kill chrome</li>
+          <li>remind me to call the dentist tomorrow</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="shell">
+    <h2 class="reveal">Nothing leaves your machine.</h2>
+    <div class="steps reveal">
+      <div class="step">
+        <span class="k">you type or talk</span>
+        <b>Ask</b>
+        <p>Type it in the panel or press Talk. Speech recognition is offline too, so your voice never goes anywhere either.</p>
+      </div>
+      <div class="step">
+        <span class="k">under a millisecond</span>
+        <b>Match</b>
+        <p>Hashed word and character n-grams score your sentence against every skill. No model to download, no embedding server, no wait.</p>
+      </div>
+      <div class="step">
+        <span class="k">your call</span>
+        <b>Run</b>
+        <p>Manual mode shows you the match and its confidence first. Auto mode just runs it. Anything irreversible asks either way.</p>
+      </div>
+    </div>
+    <p class="dim reveal" style="margin-top:2rem">A local language model is optional. If <a href="https://ollama.com" class="accent">Ollama</a> is running with <code class="mono">qwen3:4b</code>, research and page summaries get written up properly. That model fits in about 2.6GB of VRAM, so a 4GB card is enough. Without it every skill still works, you just get the extracted text and the sources instead of a synthesis.</p>
+  </div>
+</section>
+
+<section id="install">
+  <div class="shell">
+    <h2 class="reveal">Two minutes, one command.</h2>
+    <div class="install-grid">
+      <div class="reveal">
+        <pre class="code"><button class="btn copy">copy</button><span class="c"># Windows, macOS or Linux. Python 3.10+</span>
+<b>git clone https://github.com/SahilSidhu7/VirtualBuddy</b>
+<b>cd VirtualBuddy</b>
+<b>pip install -r requirements.txt</b>
+<b>python run.py</b></pre>
+        <p class="dim" style="margin-top:1.2rem">Your buddy appears in the corner of the screen. Click it to open the panel, drag it wherever you like, right click for the menu. Prefer a terminal? <code class="mono">python run.py --cli</code>.</p>
+        <div class="cta" style="margin-top:1.6rem">
+          <a class="btn primary" href="https://github.com/SahilSidhu7/VirtualBuddy/releases/latest">Download the latest release</a>
+          <a class="btn" href="https://github.com/SahilSidhu7/VirtualBuddy#readme">Read the docs</a>
+        </div>
+      </div>
+      <div>
+        <div class="note reveal"><b>Voice is one click.</b> Press Talk the first time and it fetches a 40MB offline speech model into your home folder. Nothing is sent anywhere.</div>
+        <div class="note reveal"><b>The browser tier is lazy.</b> Chromium is only downloaded the first time a page genuinely needs it, so a plain install stays small.</div>
+        <div class="note reveal"><b>Your data stays put.</b> The file index, your settings and your to-do list live in <code class="mono">~/.virtualbuddy</code>, in formats you can open yourself.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="shell">
+    <span class="brand"><img data-avatar-img src="img/character/duck/idle_0.png" alt="">VirtualBuddy</span>
+    <span class="faint" style="font-size:.88rem">Free and open source. Built for people who would rather not rent their computer back.</span>
+    <nav>
+      <span style="display:flex; gap:1.4rem">
+        <a href="https://github.com/SahilSidhu7/VirtualBuddy">GitHub</a>
+        <a href="https://github.com/SahilSidhu7/virtualbuddy-skills">Community skills</a>
+        <a href="https://github.com/SahilSidhu7/VirtualBuddy/issues">Report a bug</a>
+      </span>
+    </nav>
+  </div>
+</footer>
+
+<!-- The companion, once the hero one has scrolled away. Drag it, poke it. -->
+<div class="pet" id="pet" aria-hidden="true">
+  <span class="bubble pet-bubble"></span>
+  <img class="pet-sprite" src="img/character/duck/idle_0.png" alt="" width="96" height="96" draggable="false">
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
