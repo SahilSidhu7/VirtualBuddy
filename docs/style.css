@@ -91,6 +91,7 @@ nav a:hover { color: var(--text); }
 .btn:hover { background: var(--line); }
 .btn:active { transform: translateY(1px); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #151310; font-weight: 650; }
+.btn.big { padding: 1rem 1.7rem; font-size: 1.02rem; }
 .btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #fff); }
 
 /* ---------- hero ---------- */

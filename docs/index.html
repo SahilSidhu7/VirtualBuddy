@@ -38,7 +38,7 @@
       <h1>A small assistant that <em>lives on your desktop</em>.</h1>
       <p class="lede">It researches the web, knows where every one of your files is, edits them, and tells you what is eating your CPU. Free, offline, no API keys.</p>
       <div class="cta">
-        <a class="btn primary" href="#install">Install it</a>
+        <a class="btn primary" href="https://github.com/SahilSidhu7/VirtualBuddy/releases/latest/download/VirtualBuddy-Setup.exe">Download for Windows</a>
         <a class="btn" href="#demo">Try the router below</a>
       </div>
       <div class="stat-strip">
@@ -172,24 +172,29 @@
 
 <section id="install">
   <div class="shell">
-    <h2 class="reveal">Two minutes, one command.</h2>
+    <h2 class="reveal">Download it, double click it, done.</h2>
     <div class="install-grid">
       <div class="reveal">
-        <pre class="code"><button class="btn copy">copy</button><span class="c"># Windows, macOS or Linux. Python 3.10+</span>
+        <div class="cta" style="margin-top:.6rem">
+          <a class="btn primary big" href="https://github.com/SahilSidhu7/VirtualBuddy/releases/latest/download/VirtualBuddy-Setup.exe">Download for Windows</a>
+          <a class="btn" href="https://github.com/SahilSidhu7/VirtualBuddy/releases/latest/download/VirtualBuddy-portable.zip">Portable zip</a>
+        </div>
+        <p class="faint" style="margin-top:.9rem; font-size:.88rem">29MB installer. No admin rights needed, and the setup asks whether you want it to start when you sign in.</p>
+        <p class="dim" style="margin-top:1.4rem">Your buddy appears in the bottom right of the screen. Click it to open the panel, drag it wherever you like, right click it for settings.</p>
+
+        <p class="dim" style="margin-top:2.2rem; font-weight:600; color:var(--text)">Or run it from source, on any OS</p>
+        <pre class="code" style="margin-top:.8rem"><button class="btn copy">copy</button><span class="c"># Windows, macOS or Linux. Python 3.10+</span>
 <b>git clone https://github.com/SahilSidhu7/VirtualBuddy</b>
 <b>cd VirtualBuddy</b>
 <b>pip install -r requirements.txt</b>
 <b>python run.py</b></pre>
-        <p class="dim" style="margin-top:1.2rem">Your buddy appears in the corner of the screen. Click it to open the panel, drag it wherever you like, right click for the menu. Prefer a terminal? <code class="mono">python run.py --cli</code>.</p>
-        <div class="cta" style="margin-top:1.6rem">
-          <a class="btn primary" href="https://github.com/SahilSidhu7/VirtualBuddy/releases/latest">Download the latest release</a>
-          <a class="btn" href="https://github.com/SahilSidhu7/VirtualBuddy#readme">Read the docs</a>
-        </div>
+        <p class="dim" style="margin-top:1rem; font-size:.94rem">Prefer a terminal? <code class="mono">python run.py --cli</code>.</p>
       </div>
       <div>
         <div class="note reveal"><b>Voice is one click.</b> Press Talk the first time and it fetches a 40MB offline speech model into your home folder. Nothing is sent anywhere.</div>
         <div class="note reveal"><b>The browser tier is lazy.</b> Chromium is only downloaded the first time a page genuinely needs it, so a plain install stays small.</div>
-        <div class="note reveal"><b>Your data stays put.</b> The file index, your settings and your to-do list live in <code class="mono">~/.virtualbuddy</code>, in formats you can open yourself.</div>
+        <div class="note reveal"><b>Your data stays put.</b> The file index, your settings and your to-do list live in <code class="mono">~/.virtualbuddy</code>, in formats you can open yourself. Uninstalling leaves them alone.</div>
+        <div class="note reveal"><b>Starts with Windows, if you want.</b> Tick the box during setup, or turn it on and off any time by right clicking your buddy. It is a shortcut in your Startup folder, nothing hidden in the registry.</div>
       </div>
     </div>
   </div>

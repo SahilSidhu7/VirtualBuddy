@@ -15,6 +15,15 @@ you › research the best budget monitors
 
 ## Install
 
+**Windows:** download
+[VirtualBuddy-Setup.exe](https://github.com/SahilSidhu7/VirtualBuddy/releases/latest/download/VirtualBuddy-Setup.exe)
+and double-click it. 29MB, no admin rights, and setup offers to start it when
+you sign in. There is also a
+[portable zip](https://github.com/SahilSidhu7/VirtualBuddy/releases/latest/download/VirtualBuddy-portable.zip)
+if you would rather it wrote nothing outside its own folder.
+
+**From source, any OS:**
+
 ```bash
 git clone https://github.com/SahilSidhu7/VirtualBuddy
 cd VirtualBuddy
@@ -25,7 +34,14 @@ python run.py
 The buddy appears in the bottom-right of your screen. Click it to open the
 panel, drag it anywhere, right-click for the menu.
 
-`python run.py --cli` gives you the same thing in a terminal.
+`python run.py --cli` gives you the same thing in a terminal, and
+`python run.py --selftest` checks an install without opening a window.
+
+### Starting with Windows
+
+Tick the box during setup, or right-click your buddy and choose **Start with
+Windows** at any time. It is a shortcut in your Startup folder: visible in
+Explorer, deletable by hand, nothing written to the registry.
 
 ## How it works
 

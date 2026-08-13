@@ -1,6 +1,7 @@
 # Core — everything the buddy needs to route and run skills.
+# Routing is hashed n-grams over numpy (vb/textvec.py). scikit-learn used to
+# provide that one vectoriser and cost 180MB in the packaged build, so it went.
 numpy>=1.24
-scikit-learn>=1.3
 httpx>=0.27
 
 # Web reading. trafilatura gives clean article text; without it we fall back

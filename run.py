@@ -1,14 +1,66 @@
-"""Double-click launcher: starts the desktop buddy.
+"""Launcher.
 
-    python run.py            desktop buddy
-    python run.py --cli      terminal instead
+    python run.py              the desktop buddy
+    python run.py --cli        the terminal instead
+    python run.py --selftest   load everything, print a report, exit
+
+--selftest is what CI runs against the packaged .exe: it exercises the parts a
+frozen build usually breaks (skill discovery, sprite paths, the vectoriser)
+without opening a window.
 """
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+if not getattr(sys, "frozen", False):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+
+def selftest() -> int:
+    from vb import __version__
+    from vb.registry import load_all
+    from vb.router import Router
+    from vb.ui.sprite import asset_root
+
+    from vb.web import extract
+
+    skills = load_all()
+    router = Router(skills)
+    match = router.best("what's eating my disk space")
+    sprites = sorted(p.name for p in (asset_root() / "duck").glob("idle_*.png"))
+
+    # Extraction offline, on a fixed page: this is what breaks when the build
+    # excludes a package the extraction stack quietly imports.
+    sample = ("<html><head><title>Tide times</title></head><body><nav>menu</nav>"
+              "<article><p>" + ("The tide turns at four in the afternoon. " * 20) +
+              "</p></article></body></html>")
+    text = extract.to_text(sample, "https://example.com/tides")
+
+    print(f"version   {__version__}")
+    print(f"frozen    {bool(getattr(sys, 'frozen', False))}")
+    print(f"skills    {len(skills)}")
+    print(f"route     {match.skill.name if match else 'NONE'} "
+          f"({match.score:.2f})" if match else "route     NONE")
+    print(f"sprites   {asset_root()} -> {len(sprites)} duck idle frames")
+    print(f"extract   {len(text.split())} words from a sample page")
+
+    problems = []
+    if len(skills) < 20:
+        problems.append(f"only {len(skills)} skills registered")
+    if not match or match.skill.name != "disk_hogs":
+        problems.append("routing did not reach disk_hogs")
+    if not sprites:
+        problems.append("no sprites found")
+    if "tide turns" not in text:
+        problems.append("page extraction returned nothing usable")
+    for problem in problems:
+        print(f"FAIL      {problem}")
+    print("ok" if not problems else "FAILED")
+    return 1 if problems else 0
+
 
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        raise SystemExit(selftest())
     if "--cli" in sys.argv:
         from vb.cli import main
         sys.argv.remove("--cli")

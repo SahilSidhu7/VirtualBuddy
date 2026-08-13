@@ -1,0 +1,85 @@
+name: Build Windows installer
+
+# Runs on a version tag, and on demand. Produces two downloads and attaches them
+# to the matching GitHub release:
+#   VirtualBuddy-Setup.exe     the installer most people want
+#   VirtualBuddy-portable.zip  unzip and run
+#
+# The names carry no version so that
+# /releases/latest/download/VirtualBuddy-Setup.exe keeps working across
+# releases; that is the link the website uses.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (no leading v)"
+        required: true
+        default: "0.6.1"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Work out the version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Check routing before shipping anything
+        run: python tools/routetest.py
+
+      - name: Build the icon
+        run: python tools/make_icon.py duck
+
+      - name: Build the executable
+        run: pyinstaller packaging/windows/virtualbuddy.spec --noconfirm --distpath dist --workpath build
+
+      - name: Prove the build starts and loads its skills
+        run: python tools/smoketest.py dist/VirtualBuddy/VirtualBuddy.exe
+
+      - name: Build the installer
+        run: |
+          choco install innosetup --no-progress -y
+          & "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe" packaging\windows\VirtualBuddy.iss /DAppVersion=${{ steps.version.outputs.value }}
+
+      - name: Zip the portable build
+        shell: pwsh
+        run: Compress-Archive -Path dist/VirtualBuddy/* -DestinationPath "dist/VirtualBuddy-portable.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            dist/VirtualBuddy-Setup.exe
+            dist/VirtualBuddy-portable.zip
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/VirtualBuddy-Setup.exe dist/VirtualBuddy-portable.zip --clobber

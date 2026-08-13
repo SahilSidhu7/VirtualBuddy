@@ -8,12 +8,17 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 
-from vb import config, llm
+from vb import config, llm, startup
 from vb.agent import Agent
 from vb.registry import load_all
 from vb.ui import theme as themes
 from vb.ui.panel import Panel
 from vb.ui.pet import Pet
+
+
+def _note(text: str, detail: str = ""):
+    from vb.registry import Result
+    return Result(text=text, detail=detail)
 
 
 class App:
@@ -62,6 +67,10 @@ class App:
             label = ("● " if key == config.get("avatar") else "   ") + themes.get(key).label
             m.add_command(label=label, command=lambda k=key: self.pick_avatar(k))
         m.add_separator()
+        if startup.supported():
+            on = startup.enabled()
+            m.add_command(label=("● " if on else "   ") + "Start with Windows",
+                          command=self.toggle_startup)
         state = llm.status()
         if state["state"] == "no_model":
             m.add_command(label=f"Download {config.get('llm_model')} for smart mode",
@@ -76,6 +85,13 @@ class App:
         config.set("avatar", key)
         self.pet.set_avatar(key)
         self.panel.restyle(themes.get(key))
+
+    def toggle_startup(self):
+        ok, message = startup.toggle()
+        self.panel.show_at(*self.pet.anchor())
+        self.visible = True
+        self.panel.show_result(_note(message if ok else "Couldn't change that.",
+                                     "" if ok else message))
 
     def pull_model(self):
         """Download the model in the background; the sprite shows it's busy."""

@@ -71,9 +71,15 @@ def skill(name: str, description: str, phrases: list[str], *,
 def load_all() -> dict[str, Skill]:
     """Import every module in vb.skills so decorators run. Idempotent."""
     from vb import skills as pkg
-    for mod in pkgutil.iter_modules(pkg.__path__):
-        if not mod.name.startswith("_"):
-            importlib.import_module(f"{pkg.__name__}.{mod.name}")
+    found = {m.name for m in pkgutil.iter_modules(pkg.__path__)
+             if not m.name.startswith("_")}
+    # Scanning finds files a checkout has; the declared list covers the frozen
+    # app, where there is no directory to scan. Either alone would miss cases.
+    for name in sorted(found | set(getattr(pkg, "MODULES", ()))):
+        try:
+            importlib.import_module(f"{pkg.__name__}.{name}")
+        except ImportError:
+            continue
     return _REGISTRY
 
 
