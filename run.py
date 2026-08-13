@@ -1,96 +1,17 @@
-"""Start VirtualBuddy.
+"""Double-click launcher: starts the desktop buddy.
 
-  python run.py               text mode (type commands)
-  python run.py --voice       add voice input
-  python run.py --character   show the on-screen buddy (runs in its own thread)
+    python run.py            desktop buddy
+    python run.py --cli      terminal instead
 """
-import sys, threading
-from buddy.settings import load
-from buddy.agent import make_brain
+import sys
+from pathlib import Path
 
-def main():
-    for stream in (sys.stdout, sys.stderr):       # cp1252 consoles mangle em dashes
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
-    cfg = load()
-    args = sys.argv[1:]
-
-    if "--brain" in args or cfg.get("role") == "server":
-        # host the shared brain for the laptop/phone, then keep serving
-        from buddy.net.brain_server import serve as serve_brain
-        serve_brain(cfg)
-        return
-
-    agent = make_brain(cfg)          # local Agent, or a remote brain client (role: client)
-
-    if "--server" in args:
-        from buddy.server import serve
-        serve(agent, cfg, block=False)      # phone/other PCs can command buddy
-
-    if "--voice" in args:
-        from buddy.listener import listen_loop
-        threading.Thread(target=listen_loop,
-                         args=(cfg, agent.handle, getattr(agent, "_emit", None)),
-                         daemon=True).start()
-
-    if "--character" in args:
-        from buddy.character.character import Buddy
-        # only run the typing loop if we actually have a console
-        if sys.stdin and sys.stdin.isatty():
-            threading.Thread(target=text_loop, args=(agent,), daemon=True).start()
-        buddy = Buddy(agent.handle, cfg.get("character", "duck"),
-                      roam=cfg.get("roam", False), roam_speed=cfg.get("roam_speed", 40))
-        if hasattr(agent, "on_state"):
-            agent.on_state = buddy.set_state          # show thinking/working/listening
-        buddy.run()
-        return
-
-    text_loop(agent)
-
-def text_loop(agent):
-    from buddy import settings
-    if settings.is_first_run():
-        print("Tip: buddy isn't trained yet — it works now (cosine), but !train makes it sharper.")
-    print("VirtualBuddy ready. Commands: quit | !skills | !fix <skill> | !train | !power on|off")
-    while True:
-        try:
-            cmd = input("> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            break
-        if cmd.lower() in ("quit", "exit"):
-            break
-        if cmd.startswith("!"):
-            _repl_command(agent, cmd)
-        elif cmd:
-            agent.handle(cmd)
-
-def _repl_command(agent, cmd):
-    from buddy import corrections
-    parts = cmd.split(maxsplit=1)
-    name = parts[0].lower()
-    if not hasattr(agent, "reload_brain") and name in ("!fix", "!train", "!power"):
-        print("  (not available in client mode — that runs on the brain server)")
-        return
-    if name == "!skills":
-        print(" ", ", ".join(corrections.skill_names()))
-    elif name == "!fix":
-        if not agent.last or len(parts) < 2:
-            print("  usage: !fix <skill>   (fixes your last command)")
-        else:
-            print(" ", corrections.log_correction(agent.last[0], parts[1].strip()))
-    elif name == "!train":
-        print("  training locally...")
-        from tools import loop
-        loop.main()
-        agent.reload_brain()
-        print("  done. brain reloaded.")
-    elif name == "!power":
-        on = len(parts) > 1 and parts[1].strip().lower() in ("on", "1", "true")
-        print(" ", agent.set_power_save(on))
-    else:
-        print("  unknown command")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 if __name__ == "__main__":
-    main()
+    if "--cli" in sys.argv:
+        from vb.cli import main
+        sys.argv.remove("--cli")
+        raise SystemExit(main())
+    from vb.app import main
+    raise SystemExit(main())

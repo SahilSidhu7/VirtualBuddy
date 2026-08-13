@@ -1,0 +1,137 @@
+"""Searching and reading the web."""
+from __future__ import annotations
+
+from vb import llm, slots
+from vb.registry import Result, skill
+from vb.web import fetch, search
+
+SEARCH_VERBS = ("search", "google", "find", "look", "lookup", "duckduckgo", "web")
+READ_VERBS = ("read", "open", "fetch", "scrape", "get", "summarise", "summarize")
+
+
+def _search_slots(text: str) -> dict:
+    return {"query": slots.query_of(text, SEARCH_VERBS),
+            "limit": slots.count(text, 6)}
+
+
+@skill(
+    "web_search",
+    "Search the web and list the top results with links",
+    ["search the web for python tutorials", "google best budget laptops",
+     "google the weather", "look up who won the match", "look this up online",
+     "find articles about sleep", "search for something", "what is the price of"],
+    slots=_search_slots, tags=["web"],
+)
+def web_search(query: str = "", limit: int = 6, **_) -> Result:
+    if not query:
+        return Result.fail("Nothing to search for.", "Try: search the web for <topic>")
+    hits = search.search(query, limit=min(int(limit or 6), 10))
+    if not hits:
+        return Result.fail("No results came back.", "Search engines may be blocking us.")
+    body = "\n\n".join(h.line(i) for i, h in enumerate(hits, 1))
+    return Result(text=f"Top results for “{query}”:\n\n{body}", data=hits)
+
+
+def _read_slots(text: str) -> dict:
+    return {"url": slots.first_url(text), "topic": slots.query_of(text, READ_VERBS)}
+
+
+@skill(
+    "read_page",
+    "Open a web page and give back its readable text",
+    ["read this page", "read this link", "summarise this article link", "summarise this link",
+     "what does this article say", "scrape the text from that link",
+     "read that link and tell me what's on it", "give me the gist of this page"],
+    slots=_read_slots, slow=True, tags=["web"],
+)
+def read_page(url: str = "", topic: str = "", **_) -> Result:
+    if not url:
+        hits = search.search(topic, limit=1) if topic else []
+        if not hits:
+            return Result.fail("No URL in that.", "Paste a link, or say: search for <topic>")
+        url = hits[0].url
+    page = fetch.get(url)
+    if not page.text:
+        err = fetch.last_error(url)
+        return Result.fail(f"Couldn't read {url}.", err or "The page returned nothing.")
+    head = f"{page.title}\n{page.url}  ({page.words} words, via {page.via})"
+
+    brief = llm.ask(
+        f"Summarise this page in 6 bullet points. Facts only, no preamble.\n\n"
+        f"{page.text[:6000]}",
+        system="You summarise web pages concisely and never invent detail.")
+    body = brief or page.summary(1500)
+    return Result(text=f"{head}\n\n{body}", data=page)
+
+
+def _research_slots(text: str) -> dict:
+    return {"topic": slots.query_of(text, ("research", "about", "on") + SEARCH_VERBS),
+            "sources": slots.count(text, 4)}
+
+
+@skill(
+    "research",
+    "Research a topic across several sites and write up what they say",
+    ["research electric cars for me", "do some research on vitamin d",
+     "dig into the news about the election", "find out everything about rust lifetimes",
+     "compare the best mechanical keyboards"],
+    slots=_research_slots, slow=True, tags=["web"],
+)
+def research(topic: str = "", sources: int = 4, **_) -> Result:
+    if not topic:
+        return Result.fail("No topic given.", "Try: research <topic>")
+    hits = search.search(topic, limit=max(int(sources or 4), 3) + 2)
+    if not hits:
+        return Result.fail("Search returned nothing.", f"Topic: {topic}")
+
+    pages, notes = [], []
+    for hit in hits[: int(sources or 4)]:
+        page = fetch.get(hit.url)
+        if page.words < 80:
+            continue
+        pages.append(page)
+        notes.append(f"### {page.title}\n{page.url}\n{page.text[:3500]}")
+    if not pages:
+        return Result.fail("Every source failed to load.",
+                           "\n".join(h.url for h in hits[:3]))
+
+    joined = "\n\n".join(notes)
+    write_up = llm.ask(
+        f"Topic: {topic}\n\nSources:\n{joined}\n\n"
+        "Write a briefing: 5-8 bullets of what the sources agree on, then a short "
+        "'worth knowing' line for anything they disagree about. Cite by site name.",
+        system="You are a research assistant. Use only the supplied sources.",
+        max_tokens=900)
+
+    if not write_up:                       # extractive fallback, no LLM needed
+        write_up = "\n\n".join(
+            f"**{p.title}** — {p.url}\n{p.summary(600)}" for p in pages)
+
+    src = "\n".join(f"- {p.title} — {p.url}" for p in pages)
+    return Result(text=f"Research: {topic}\n\n{write_up}\n\nSources:\n{src}", data=pages)
+
+
+@skill(
+    "extract_links",
+    "List every link on a page",
+    ["get all the links from this page", "list the links on that site",
+     "extract urls from this page", "list the urls on this link",
+     "grab every link from that link", "show me all links"],
+    slots=lambda t: {"url": slots.first_url(t)}, slow=True, tags=["web"],
+)
+def extract_links(url: str = "", **_) -> Result:
+    if not url:
+        return Result.fail("No URL in that.", "Paste a link to pull links from.")
+    page = fetch.get(url)
+    from vb.web.extract import links as parse_links
+    found = parse_links(page.html, base=page.url)
+    seen, rows = set(), []
+    for href, label in found:
+        if href in seen:
+            continue
+        seen.add(href)
+        rows.append(f"- {label or '(no text)'} — {href}")
+    if not rows:
+        return Result.fail("No links found.", page.url)
+    return Result(text=f"{len(rows)} links on {page.title}:\n" + "\n".join(rows[:100]),
+                  data=found)

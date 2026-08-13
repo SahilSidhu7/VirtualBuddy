@@ -1,23 +1,13 @@
-# Core (small, needed)
-pyyaml
-numpy
-scikit-learn      # trains the local intent classifier
-joblib
-pyttsx3           # offline text-to-speech
-psutil            # system status, agents, serving
-pillow            # screenshots + character sprites
-pywebview         # modern dashboard window (uses the OS webview; tkinter fallback)
-playwright        # web automation primitives (open/read/click/fill); browser bundled in release
-pyperclip         # clipboard skills
-pygetwindow       # "what's open", switch/close/minimize windows
+# Core — everything the buddy needs to route and run skills.
+numpy>=1.24
+scikit-learn>=1.3
+httpx>=0.27
 
-# Intent embeddings come from Ollama (nomic-embed-text) - no torch needed.
-# Optional heavier fallback if you don't want to use Ollama for embeddings:
-# sentence-transformers
+# Web reading. trafilatura gives clean article text; without it we fall back
+# to a plain tag-stripper, so it is nice-to-have rather than required.
+trafilatura>=1.8
 
-# Voice input (optional, for --voice)
-vosk
-sounddevice
-# Model: installer --voice downloads vosk-model-small-en-us-0.15 -> models/vosk
-
-# Character overlay + web search use built-in tkinter / urllib (no install)
+# Optional, installed on demand from inside the app:
+#   playwright        tier-2 browser for JS-heavy sites and clicking
+#   vosk, sounddevice voice input
+#   pyttsx3           spoken replies

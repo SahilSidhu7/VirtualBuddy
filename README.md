@@ -1,186 +1,129 @@
-# VirtualBuddy (VB)
+# VirtualBuddy
 
-Local PC assistant. Voice or app commands -> runs tasks, manages files, controls Claude, reports back.
-Zero budget. Everything local. Simple files a non-tech person can read.
+A small companion that lives on your desktop and runs prebuilt skills. Type or
+talk to it, it finds the skill that matches, and either shows you the match or
+just runs it.
 
-**🌐 Website:** https://sahilsidhu7.github.io/VirtualBuddy/
-**🧩 Skills repo:** https://github.com/SahilSidhu7/virtualbuddy-skills
+Its main job is the web: searching, scraping, and researching across sites. All
+of that works with no API keys, no accounts, and no cloud model. A local LLM is
+optional and only makes the write-ups better.
 
-## Install (Windows / macOS / Linux)
 ```
+you › research the best budget monitors
+→ research(topic='best budget monitors')   [0.62]     Run  /  Other
+```
+
+## Install
+
+```bash
 git clone https://github.com/SahilSidhu7/VirtualBuddy
 cd VirtualBuddy
-python install.py          # add --voice for offline speech
-python app.py              # control panel
+pip install -r requirements.txt
+python run.py
 ```
-Update anytime: `python update.py` (git pull + deps + retrain). Needs Python 3.9+
-and, for the local brain, [Ollama](https://ollama.com).
 
-Your settings + trained model live in **`~/.virtualbuddy/`** (config.yaml, workspace,
-models, data) — so they survive updates and work for the installed app. First launch
-offers to train the brain; it works immediately either way.
+The buddy appears in the bottom-right of your screen. Click it to open the
+panel, drag it anywhere, right-click for the menu.
 
-## What you can ask it
-Everyday things, by typing or by voice ("buddy, ..."):
+`python run.py --cli` gives you the same thing in a terminal.
 
-| You say | Buddy does |
+## How it works
+
+Every skill declares the phrasings it answers to. At startup those phrases are
+turned into vectors with hashed word and character n-grams (`vb/textvec.py`) —
+no model download, no network, sub-millisecond. Your prompt is scored against
+them by cosine similarity, and the best skill wins.
+
+* **Manual mode** shows you the match, its confidence, and the arguments it
+  pulled out of your sentence. Nothing runs until you say so.
+* **Auto mode** runs the top match when it scores above `0.45`. Skills marked
+  dangerous still ask.
+
+Arguments come from `vb/slots.py`: strip the words that made the skill match,
+keep what is left. `open spotify` gives `target=spotify`, `search the web for
+tide times` gives `query=tide times`.
+
+## The web layer
+
+Two tiers, and the cheap one runs first.
+
+| Tier | What it is | When it runs |
+|---|---|---|
+| HTTP | `httpx` + `trafilatura` extraction | always tried first, a few hundred ms |
+| Browser | Playwright Chromium | page was blocked, or rendered nothing |
+
+Chromium is a ~150MB download, so it is never fetched until a page actually
+needs it. Search goes through DuckDuckGo's HTML endpoint with a SearXNG
+fallback: no key, no quota.
+
+## Smart mode (optional)
+
+If [Ollama](https://ollama.com) is running with `qwen3:4b`, the research and
+read skills use it to write up what they found. That model runs in about 2.6GB
+of VRAM, so a 4GB card handles it.
+
+Without it, every skill still works: you get the extracted text and the sources
+instead of a synthesis. The right-click menu downloads the model for you.
+
+## Voice
+
+Press **Talk** and speak. Recognition is offline, via Vosk. The first press
+installs `vosk` and `sounddevice` and downloads a 40MB English model into
+`~/.virtualbuddy/models`.
+
+## Skills
+
+| Skill | Does |
 |---|---|
-| "open chrome", "fire up vs code" | launches the app |
-| "close spotify", "switch to my browser", "show my desktop" | window control |
-| "search youtube for lofi", "google how to boil an egg" | searches that site in a real browser |
-| "open youtube", "take me to gmail" | opens the site |
-| "who won the world cup", "what's the weather in delhi" | free web lookup, answered in place |
-| **"what's happening on my pc"** | CPU, memory, disk, battery, uptime, busiest apps, what's in front |
-| "what's using my cpu", "what's eating my ram" | top processes, merged by app |
-| "what apps do i have open" | list of open windows |
-| "how much disk space do i have", "am i online" | drives / connection + live speed |
-| "open my downloads", "where is my resume", "what did i just download" | folders and file search |
-| "turn the volume down", "mute", "pause the music", "next track" | volume + media keys |
-| "set a timer for 5 minutes", "remind me in an hour to stretch" | timers and reminders |
-| "what's on my clipboard", "save my clipboard to a file" | clipboard |
-| "shut down my pc", "restart", "sleep", "sign me out" | **asks yes/no first**, then does it |
-| "lock my screen", "take a screenshot", "what time is it" | the basics |
+| `web_search` | search the web, list results with links |
+| `research` | read several sources on a topic and write it up |
+| `read_page` | fetch one page and give back its text |
+| `extract_links` | list every link on a page |
+| `open_app` | launch an installed application |
+| `open_site` | open a website |
+| `open_folder` | open a folder |
 
-Anything buddy doesn't know yet goes to the planner (composes primitives), then
-the local LLM, then a free web search — and only then to Claude, if you opted in.
+### Adding one
 
-## Characters
-duck · robot · crab · elf (pixel-art). Pick in the control panel or set
-`character:` in config.yaml. Add your own: a folder in `assets/character/<name>/`
-with `idle_0.png`, `idle_1.png`, `talk_0.png`. Regenerate defaults:
-`python -m tools.make_sprites && python -m tools.make_pixels`.
+Drop a module in `vb/skills/`. It is picked up at startup.
 
-## Parts
-- `buddy/listener.py` - wake word + speech-to-text (offline, optional)
-- `buddy/brain.py`     - figures out what you want (embeddings) + picks a skill
-- `buddy/voice.py`     - talks back (text-to-speech)
-- `buddy/skills/`      - one file = one kind of task
-- `buddy/character/`   - tiny character that roams the screen
-- `run.py`             - starts everything
+```python
+from vb import slots
+from vb.registry import Result, skill
 
-## Run
-```
-pip install -r requirements.txt   # heavy voice deps optional, see file
-python app.py                     # control panel: settings, character, launch, train
-python run.py                     # text mode works with zero extra installs
-python run.py --voice             # add voice once deps installed
-python run.py --character         # show the on-screen buddy
+@skill("say_hello",
+       "Greet someone by name",
+       ["say hello to priya", "greet my friend"],
+       slots=lambda text: {"name": slots.after(text, ("hello", "greet"))})
+def say_hello(name: str = "", **_) -> Result:
+    return Result(text=f"Hello, {name or 'you'}.")
 ```
 
-## Control panel (`app.py`)
-One window, 3 tabs:
-- Settings - wake word, sensitivity, voice on/off, Claude command, launch buttons.
-- Character - live preview + "Regenerate default sprites". Drop your own PNGs in
-  `assets/character/` (named `idle_0.png`, `talk_0.png` ...) to reskin.
-- Skills & Training - lists what buddy knows + runs the 2-bot training loop.
+`phrases` is what the router matches against, so write them the way you would
+actually say them. Set `danger=True` on anything irreversible and it will ask
+first even in auto mode.
 
-## The on-screen buddy
-Real animated sprite (idle bob + blink, talk frames while answering).
-- drag it anywhere
-- click / double-click -> type a command
-- right-click -> quick menu (time, screenshot, status, lock, settings, quit)
-Sprites are generated locally: `python -m tools.make_sprites`.
+## Layout
 
-## Modes
-- Text: type commands in terminal (always works)
-- Voice: say "buddy ..." then your command
-- Character: click the buddy, then speak/type
-
-## How it decides what to do
-1. Turn your words into a vector (embedding).
-2. Compare to every skill's example phrases.
-3. Best match wins. If nothing close -> ask Claude to handle it.
-
-## Where answers come from (saves Claude tokens)
-1. Confident skill match -> run the skill (slots pull the details reliably).
-2. Local LLM via Ollama -> answers + reasons offline, no tokens.
-3. Looks like a question -> free web search (DuckDuckGo + Wikipedia, no key).
-4. Only if all fail -> Claude CLI (last resort).
-
-## Local brain (Ollama) + tool-calling
-Buddy uses your local Ollama for general answers - offline, free, private.
-It can also **call skills itself**: for anything the fast classifier isn't
-sure about, the LLM decides which skill(s) to run - including compound
-commands like "what time is it and lock my pc in 20 seconds" (runs both).
-Set the model in `config.yaml` (`llm_model`). ~7B (e.g. `qwen2.5:latest`) is a
-good balance. First reply after idle loads the model into RAM (slow once),
-then fast; buddy keeps it warm 10 min.
-
-## PC <-> mobile <-> PC sync
-Command buddy from your phone or another PC on the same WiFi.
 ```
-python run.py --server     # or the "Start server" button in the control panel
-```
-It prints a URL like `http://192.168.1.20:8770`. Open it on your phone
-(same WiFi), enter the token from `config.yaml`, then type or tap 🎤 to talk.
-Every command needs the token - change `server_token` from the default.
-
-Control another PC (both running the server): add peers in the Sync tab (give
-each a nickname and pick a default), then:
-```
-> on gaming-pc lock the screen
-> tell laptop to take a screenshot
-> take a screenshot          # no name -> goes to your default peer
-```
-Buddy relays it and shows the reply as `[gaming-pc] ...`. Nicknames ("the rig")
-and the default target are set in the Sync tab or `config.yaml`
-(`peers:` + `default_peer:`).
-
-## Buddy learns your commands
-Every time buddy runs a command it remembers what worked (a command→skill graph
-under `~/.virtualbuddy/memory/`). Next time you say something similar, it reuses
-the skill that worked before instead of re-guessing — so it gets more *yours* the
-more you use it. Early on it asks "did I get that right?"; your yes/no tunes the
-memory. Confirmed commands also become the training set the fine-tuner batches up
-(`command_memory: true` to toggle).
-
-Matching uses hashed n-grams computed in-process, so recall is instant. Set
-`graph_vectors: embed` if you'd rather pay ~2s per command for looser paraphrase
-matching from the embedding model.
-
-## Dashboard
-`vb --dashboard` (or the character's right-click menu) opens the control panel:
-a chat box that talks to buddy directly — type, or press 🎙 and speak one command —
-plus character picker, settings, sync, and the advanced training tools.
-
-## Power-saving mode
-Frees resources: unloads the LLM from RAM, skips it entirely. Skills, web
-search, and corrections still work. Toggle in the control panel, in
-`config.yaml` (`power_save: true`), or in text mode:
-```
-> !power on      # LLM off, memory freed
-> !power off     # LLM back on
+vb/
+  router.py     semantic search over the skill list
+  registry.py   the @skill decorator and discovery
+  slots.py      pulling arguments out of a sentence
+  agent.py      route, confirm, run
+  llm.py        optional Ollama client
+  voice.py      optional offline speech input
+  web/          search, tiered fetch, extraction
+  skills/       the skills themselves
+  ui/           desktop sprite and command panel
+tools/routetest.py   route-only self test (never executes skills)
 ```
 
-## Community skills
-One file = one skill. Share yours, install others:
-```
-python -m tools.install_skill path\to\skill.py     # or a URL
-> !train                                            # activate it in buddy
-```
-Template, registry, and a showcase website live in `../VB-others/`.
+## Testing
 
-## Buddy learns from you (no tokens)
-If buddy picks the wrong skill, correct it once and retrain:
+```bash
+python tools/routetest.py
 ```
-> pull up my documents folder      # buddy guessed wrong
-> !fix open_app                    # tell it the right skill
-> !train                           # bakes it in (2-bot loop) + reloads
-```
-Also: `!skills` lists what buddy knows.
 
-## Make the brain smarter locally (2-bot loop, no Claude tokens)
-Two local bots improve intent matching by themselves:
-- BUILDER (`tools/builder.py`) - makes training phrases + trains a small classifier.
-- CRITIC  (`tools/critic.py`)  - tests it on unseen wording, logs every miss.
-The loop feeds misses back to the builder until accuracy is high:
-```
-python -m tools.loop            # target 95%, up to 6 rounds
-python -m tools.loop 0.9 4      # custom target / rounds
-```
-Check it still understands the everyday commands (routing only — never runs them):
-```
-python -m tools.selftest
-```
-Output -> `models/intent_clf.joblib`. The brain auto-uses it if present.
-Hit 99% on first round with the starter skills. All local, offline, free.
+Routing is checked, execution is not: this suite must never launch apps or open
+windows as a side effect of a test run.

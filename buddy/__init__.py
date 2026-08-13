@@ -1,1 +1,0 @@
-# VirtualBuddy package
