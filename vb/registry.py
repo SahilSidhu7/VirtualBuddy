@@ -24,6 +24,14 @@ class Skill:
     danger: bool = False          # needs confirmation even in auto mode
     slow: bool = False            # long-running; UI shows a working state
     tags: list[str] = field(default_factory=list)
+    triggers: list[str] = field(default_factory=list)
+    """Regexes that give this skill away.
+
+    Similarity alone can't separate skills that share vocabulary — "open my
+    downloads" and "what's in my downloads" are one word apart and mean
+    different things. A trigger is that word: matching one is worth a bounded
+    bonus on top of the cosine score, never a decision on its own.
+    """
 
     def match_text(self) -> list[str]:
         """Phrases the router encodes for this skill."""
@@ -47,12 +55,14 @@ class Result:
 
 
 def skill(name: str, description: str, phrases: list[str], *,
-          slots=None, danger: bool = False, slow: bool = False, tags=None):
+          slots=None, danger: bool = False, slow: bool = False, tags=None,
+          triggers=None):
     """Decorator registering the wrapped function as a skill."""
     def deco(fn):
         _REGISTRY[name] = Skill(
             name=name, description=description, phrases=phrases, run=fn,
             slots=slots, danger=danger, slow=slow, tags=list(tags or []),
+            triggers=list(triggers or []),
         )
         return fn
     return deco

@@ -65,6 +65,7 @@ def _launch(target: str) -> None:
     ["open chrome", "launch spotify", "start notepad", "run the calculator",
      "open vs code", "fire up steam"],
     slots=lambda t: {"target": slots.after(t, OPEN_VERBS)}, tags=["local"],
+    triggers=[r"^\s*(open|launch|start|run|fire up)\b"],
 )
 def open_app(target: str = "", **_) -> Result:
     name = (target or "").strip().lower()
@@ -145,6 +146,8 @@ def open_site(url: str = "", name: str = "", **_) -> Result:
      "take me to my pictures folder"],
     slots=lambda t: {"name": slots.after(t, OPEN_VERBS + ("show", "goto"))},
     tags=["local"],
+    triggers=[r"\b(open|take me to|go to)\b.{0,20}\bfolder\b",
+              r"^\s*open my (downloads|desktop|documents|pictures|music|videos)\b"],
 )
 def open_folder(name: str = "", **_) -> Result:
     home = Path.home()

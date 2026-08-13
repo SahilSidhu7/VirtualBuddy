@@ -18,6 +18,10 @@ from vb.registry import Skill, load_all
 AUTO_THRESHOLD = 0.45     # run without asking, in auto mode
 SHOW_THRESHOLD = 0.22     # below this we admit we have no idea
 
+TRIGGER_BONUS = 0.22      # a skill's giveaway word is present
+TRIGGER_EXTRA = 0.08      # each further one
+TRIGGER_CAP = 0.34        # never enough to win on keywords alone
+
 
 _URL = re.compile(r"https?://\S+|\b(?:www\.)?[\w-]+\.(?:com|org|net|io|dev|ai|co|in)\b\S*", re.I)
 
@@ -46,7 +50,21 @@ class Router:
         self._matrix = None
         self._build()
 
+    def _compile(self):
+        self._triggers = {
+            name: [re.compile(pattern, re.I) for pattern in sk.triggers]
+            for name, sk in self.skills.items() if sk.triggers
+        }
+
+    def _bonus(self, name: str, prompt: str) -> float:
+        """Bounded lift for skills whose giveaway words are present."""
+        hits = sum(1 for rx in self._triggers.get(name, ()) if rx.search(prompt))
+        if not hits:
+            return 0.0
+        return min(TRIGGER_BONUS + (hits - 1) * TRIGGER_EXTRA, TRIGGER_CAP)
+
     def _build(self):
+        self._compile()
         texts, owners = [], []
         for name, sk in self.skills.items():
             for phrase in sk.match_text():
@@ -59,11 +77,14 @@ class Router:
         """Best skills for this prompt, highest score first."""
         if self._matrix is None or not prompt.strip():
             return []
-        sims = textvec.similarity(self._matrix, textvec.encode(normalise(prompt))[0])
+        clean = normalise(prompt)
+        sims = textvec.similarity(self._matrix, textvec.encode(clean)[0])
         best: dict[str, float] = {}
         for name, score in zip(self._names, sims):
             if score > best.get(name, -1):
                 best[name] = float(score)
+        for name in best:
+            best[name] = min(1.0, best[name] + self._bonus(name, clean))
         ordered = sorted(best.items(), key=lambda kv: kv[1], reverse=True)
         out = []
         for name, score in ordered[:top]:

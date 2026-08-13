@@ -7,6 +7,12 @@ httpx>=0.27
 # to a plain tag-stripper, so it is nice-to-have rather than required.
 trafilatura>=1.8
 
+# Task manager and PC health readings.
+psutil>=5.9
+
+# Deleting via the Recycle Bin instead of unlink, so it stays undoable.
+send2trash>=1.8
+
 # Optional, installed on demand from inside the app:
 #   playwright        tier-2 browser for JS-heavy sites and clicking
 #   vosk, sounddevice voice input

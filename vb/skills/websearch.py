@@ -21,6 +21,8 @@ def _search_slots(text: str) -> dict:
      "google the weather", "look up who won the match", "look this up online",
      "find articles about sleep", "search for something", "what is the price of"],
     slots=_search_slots, tags=["web"],
+    triggers=[r"\b(google|search|look up|dig up)\b", r"\bon the (web|internet)\b",
+              r"\b(find|show me)\b.{0,20}\barticles?\b"],
 )
 def web_search(query: str = "", limit: int = 6, **_) -> Result:
     if not query:
@@ -74,8 +76,13 @@ def _research_slots(text: str) -> dict:
     "Research a topic across several sites and write up what they say",
     ["research electric cars for me", "do some research on vitamin d",
      "dig into the news about the election", "find out everything about rust lifetimes",
-     "compare the best mechanical keyboards"],
+     "compare the best mechanical keyboards",
+     "give me the lowdown on creatine from a few sites",
+     "what do people say about this drug", "brief me on the housing market"],
     slots=_research_slots, slow=True, tags=["web"],
+    triggers=[r"\bresearch\b", r"\bdig into\b", r"\bbrief me\b", r"\blowdown\b",
+              r"\bfind out (everything|more)\b", r"\bcompare\b",
+              r"\b(few|several|multiple|couple of) (sites|sources)\b"],
 )
 def research(topic: str = "", sources: int = 4, **_) -> Result:
     if not topic:

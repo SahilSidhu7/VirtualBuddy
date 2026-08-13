@@ -14,6 +14,9 @@ FILLER = {
     "the", "a", "an", "my", "i", "want", "to", "wanna", "need", "let", "s",
     "up", "now", "some", "and", "then", "just", "go", "ahead",
     "give", "show", "tell", "results", "result", "sources",
+    # auxiliaries that survive "where did i put my resume"
+    "did", "do", "does", "is", "are", "was", "were", "put", "save", "saved",
+    "keep", "kept", "stored", "store", "hey",
 }
 
 QUOTED = re.compile(r"[\"'“”‘’](.+?)[\"'“”‘’]")
@@ -36,6 +39,21 @@ def after(text: str, verbs: tuple[str, ...]) -> str:
             rest = [x for x in words[i + 1:] if x not in FILLER]
             return " ".join(rest).strip()
     return strip_filler(text)
+
+
+LOCATION = re.compile(r"\b(?:in|inside|under|within|from)\s+(?:my\s+)?([\w~. \\/:-]+)$", re.I)
+
+
+def location(text: str) -> str:
+    """A place, but only when the sentence actually names one.
+
+    `after()` falls back to the whole sentence when its verb is missing, which
+    is right for a search query and wrong for a folder: "which files are huge"
+    would otherwise be read as a folder name and silently scope the answer to
+    whatever folder matched best.
+    """
+    m = LOCATION.search(text)
+    return m.group(1).strip().rstrip("?.") if m else ""
 
 
 def strip_filler(text: str) -> str:

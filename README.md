@@ -43,6 +43,12 @@ Arguments come from `vb/slots.py`: strip the words that made the skill match,
 keep what is left. `open spotify` gives `target=spotify`, `search the web for
 tide times` gives `query=tide times`.
 
+Similarity alone can't separate skills that share vocabulary — "open my
+downloads" and "what's in my downloads" are one word apart and mean different
+things. So a skill can also declare `triggers`: regexes that give it away.
+Matching one adds a bounded bonus (max +0.34) to the cosine score, never enough
+to win on keywords alone.
+
 ## The web layer
 
 Two tiers, and the cheap one runs first.
@@ -55,6 +61,42 @@ Two tiers, and the cheap one runs first.
 Chromium is a ~150MB download, so it is never fetched until a page actually
 needs it. Search goes through DuckDuckGo's HTML endpoint with a SearXNG
 fallback: no key, no quota.
+
+## Your PC as a graph
+
+Say **index my pc** once. The buddy walks your own folders (Desktop, Documents,
+Downloads, Pictures, Videos, Music, and any project folders it finds) and stores
+them in `~/.virtualbuddy/pc.db` as nodes and `contains` edges. Machine-generated
+folders — `node_modules`, `.git`, `AppData`, `Windows`, `Program Files` — are
+skipped, so the index stays about your stuff.
+
+On this machine that's 48,000 files in under 3 seconds. Re-running is a diff:
+new files are added, deleted ones are dropped.
+
+Then you can ask:
+
+```
+where did i put my resume          what's eating my disk space
+what's in my downloads             what did i work on today
+how many pdfs do i have            what's on my pc
+```
+
+Lookups are FTS5 for candidates, then textvec to rank them by meaning, so
+"holiday photos" finds a folder called `Goa 2024` if the words line up.
+
+### Writing files
+
+`create a file called notes.txt on my desktop saying remember the milk`, `add a
+line to notes.txt saying call mum`, `in notes.txt replace monday with tuesday`.
+
+Three rules the buddy will not break: it never writes inside Windows, Program
+Files or ProgramData; it never overwrites an existing file unless you say
+"overwrite"; and it will not append text to a non-text file. Moving and deleting
+always ask first, and deleting goes to the Recycle Bin.
+
+When you give a bare filename, it's matched against the graph — but only by
+exact name, never fuzzily. A fuzzy match is right for *find my tax pdf* and
+catastrophic for *append this to X*.
 
 ## Smart mode (optional)
 
@@ -73,12 +115,49 @@ installs `vosk` and `sounddevice` and downloads a 40MB English model into
 
 ## Skills
 
+**Web**
+
 | Skill | Does |
 |---|---|
 | `web_search` | search the web, list results with links |
 | `research` | read several sources on a topic and write it up |
 | `read_page` | fetch one page and give back its text |
 | `extract_links` | list every link on a page |
+
+**Your PC**
+
+| Skill | Does |
+|---|---|
+| `index_pc` | scan your folders into the graph |
+| `find_file` | find a file or folder anywhere |
+| `whats_in` | list what's inside a folder |
+| `disk_hogs` | biggest files and heaviest folders |
+| `recent_files` | what you changed recently |
+| `pc_summary` | totals and a breakdown by file type |
+
+**Files**
+
+| Skill | Does |
+|---|---|
+| `create_folder` / `create_file` | make things |
+| `read_file` | show a text file |
+| `edit_file` | append a line, or replace text |
+| `move_file` | move or rename (asks first) |
+| `delete_file` | send to the recycle bin (asks first) |
+
+**Task manager**
+
+| Skill | Does |
+|---|---|
+| `running_apps` | what's running, CPU and memory per app |
+| `kill_app` | close a program (asks first) |
+| `pc_health` | battery, disk space, uptime |
+| `add_task` / `list_tasks` / `complete_task` | personal to-do list |
+
+**Apps**
+
+| Skill | Does |
+|---|---|
 | `open_app` | launch an installed application |
 | `open_site` | open a website |
 | `open_folder` | open a folder |
@@ -114,6 +193,7 @@ vb/
   llm.py        optional Ollama client
   voice.py      optional offline speech input
   web/          search, tiered fetch, extraction
+  pc/           the file graph, and guarded file editing
   skills/       the skills themselves
   ui/           desktop sprite and command panel
 tools/routetest.py   route-only self test (never executes skills)
@@ -125,5 +205,9 @@ tools/routetest.py   route-only self test (never executes skills)
 python tools/routetest.py
 ```
 
-Routing is checked, execution is not: this suite must never launch apps or open
-windows as a side effect of a test run.
+79 phrasings, 60 declared and 19 deliberately unseen. The unseen ones are the
+point: a declared phrase scores 1.00 and proves nothing.
+
+Routing is checked, execution is not. This suite must never launch an app, open
+a window, or write a file as a side effect of a test run — `kill_app` and
+`delete_file` are real.
