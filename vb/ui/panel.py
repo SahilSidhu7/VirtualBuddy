@@ -149,6 +149,8 @@ class Panel(tk.Toplevel):
         self.out.tag_configure("dim", foreground=t.text_faint)
         self.out.tag_configure("bad", foreground=t.bad)
         self.out.tag_configure("mono", font=(t.mono, 9), foreground=t.text_dim)
+        self.out.tag_configure("path", font=(t.mono, 8), foreground=t.text_faint,
+                               spacing3=6)
 
     # -- states ----------------------------------------------------------
     def show_empty(self):
@@ -177,7 +179,16 @@ class Panel(tk.Toplevel):
         head, _, rest = res.text.partition("\n")
         self.out.insert("end", head + "\n", "bad" if not res.ok else "head")
         if rest.strip():
-            self.out.insert("end", rest.strip() + "\n")
+            # Skills indent their tabular rows by two spaces; those columns only
+            # line up in a monospaced font.
+            for line in rest.strip("\n").splitlines():
+                if line.startswith("    "):        # the path under an entry
+                    tag = "path"
+                elif line.startswith("  "):        # a data row
+                    tag = "mono"
+                else:
+                    tag = ()
+                self.out.insert("end", line + "\n", tag)
         if res.detail:
             self.out.insert("end", "\n" + res.detail + "\n", "dim")
         self.out.configure(state="disabled")
