@@ -62,6 +62,28 @@ def looks_empty(text: str) -> bool:
     return len(text.split()) < 60
 
 
+_SHELL_MARKERS = re.compile(
+    r"""<div[^>]+id=["'](root|app|__next|__nuxt)["']"""
+    r"""|enable\s+javascript|<noscript>""", re.I)
+_SCRIPT = re.compile(r"<script\b", re.I)
+
+
+def needs_browser(raw: str, text: str) -> bool:
+    """Is the thin result a JavaScript shell, or just a short page?
+
+    Escalating to Chromium costs about twenty five seconds. example.com is 200
+    words of complete HTML: short, but there is nothing a browser would add.
+    A shell, by contrast, is mostly scripts and an empty mount point.
+    """
+    if not looks_empty(text):
+        return False
+    if _SHELL_MARKERS.search(raw or ""):
+        return True
+    if len(raw or "") < 4000 and len(_SCRIPT.findall(raw or "")) < 3:
+        return False                       # small, script-free, genuinely short
+    return len(_SCRIPT.findall(raw or "")) >= 3
+
+
 def links(raw: str, base: str = "") -> list[tuple[str, str]]:
     """(href, anchor text) pairs, absolute where possible."""
     from urllib.parse import urljoin

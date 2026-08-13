@@ -1,9 +1,14 @@
 """Searching and reading the web."""
 from __future__ import annotations
 
-from vb import llm, slots
+from vb import llm, progress, slots
 from vb.registry import Result, skill
 from vb.web import fetch, search
+
+
+def _host(url: str) -> str:
+    from urllib.parse import urlparse
+    return urlparse(url).netloc.replace("www.", "") or url
 
 SEARCH_VERBS = ("search", "google", "find", "look", "lookup", "duckduckgo", "web")
 READ_VERBS = ("read", "open", "fetch", "scrape", "get", "summarise", "summarize")
@@ -27,6 +32,7 @@ def _search_slots(text: str) -> dict:
 def web_search(query: str = "", limit: int = 6, **_) -> Result:
     if not query:
         return Result.fail("Nothing to search for.", "Try: search the web for <topic>")
+    progress.say(f"Searching for “{query}”…")
     hits = search.search(query, limit=min(int(limit or 6), 10))
     if not hits:
         return Result.fail("No results came back.", "Search engines may be blocking us.")
@@ -45,19 +51,25 @@ def _read_slots(text: str) -> dict:
      "what does this article say", "scrape the text from that link",
      "read that link and tell me what's on it", "give me the gist of this page"],
     slots=_read_slots, slow=True, tags=["web"],
+    triggers=[r"\b(read|summari[sz]e|scrape|gist of)\b.{0,20}\b(link|page|article|site)\b",
+              r"\blink\b.{0,24}\b(say|says|about)\b"],
 )
 def read_page(url: str = "", topic: str = "", **_) -> Result:
     if not url:
+        progress.say(f"Finding a page about “{topic}”…")
         hits = search.search(topic, limit=1) if topic else []
         if not hits:
             return Result.fail("No URL in that.", "Paste a link, or say: search for <topic>")
         url = hits[0].url
+    progress.say(f"Fetching {_host(url)}…")
     page = fetch.get(url)
     if not page.text:
         err = fetch.last_error(url)
         return Result.fail(f"Couldn't read {url}.", err or "The page returned nothing.")
     head = f"{page.title}\n{page.url}  ({page.words} words, via {page.via})"
 
+    if llm.enabled():
+        progress.say("Summarising…")
     brief = llm.ask(
         f"Summarise this page in 6 bullet points. Facts only, no preamble.\n\n"
         f"{page.text[:6000]}",
@@ -87,12 +99,15 @@ def _research_slots(text: str) -> dict:
 def research(topic: str = "", sources: int = 4, **_) -> Result:
     if not topic:
         return Result.fail("No topic given.", "Try: research <topic>")
+    progress.say(f"Searching for “{topic}”…")
     hits = search.search(topic, limit=max(int(sources or 4), 3) + 2)
     if not hits:
         return Result.fail("Search returned nothing.", f"Topic: {topic}")
 
+    wanted = int(sources or 4)
     pages, notes = [], []
-    for hit in hits[: int(sources or 4)]:
+    for i, hit in enumerate(hits[:wanted], start=1):
+        progress.say(f"Reading {i} of {wanted}: {_host(hit.url)}")
         page = fetch.get(hit.url)
         if page.words < 80:
             continue
@@ -102,6 +117,8 @@ def research(topic: str = "", sources: int = 4, **_) -> Result:
         return Result.fail("Every source failed to load.",
                            "\n".join(h.url for h in hits[:3]))
 
+    progress.say("Writing it up…" if llm.enabled()
+                 else "Pulling out the useful parts…")
     joined = "\n\n".join(notes)
     write_up = llm.ask(
         f"Topic: {topic}\n\nSources:\n{joined}\n\n"

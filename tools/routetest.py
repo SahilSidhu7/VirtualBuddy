@@ -109,6 +109,14 @@ UNSEEN = [
     # for "tell me about X across sources".
     ("dig up some articles on sleep debt", "web_search"),
     ("give me the lowdown on creatine from a few sites", "research"),
+
+    # Typed paths used to swamp the intent words: "read <long path>" once
+    # scored read_file 0.35 against delete_file 0.30 and binned the file.
+    ("read C:/Users/sam/Documents/notes.txt", "read_file"),
+    ("read C:\\Users\\sam\\AppData\\Local\\Temp\\tmp_9f2/probe.txt", "read_file"),
+    ("open C:/Projects/thing/readme.md", "read_file"),
+    ("read https://example.com/article", "read_page"),
+    ("summarise https://news.ycombinator.com/item?id=1", "read_page"),
 ]
 
 

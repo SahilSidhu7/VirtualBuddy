@@ -165,8 +165,12 @@ def create_file(name: str = "", place: str = "", content: str = "",
     slots=lambda t: dict(zip(("name", "place"),
                              _name_and_place(t.replace("read", "open", 1)))),
     tags=["pc"],
+    # "path" and "link" are what router.normalise leaves behind for a typed
+    # path and a URL, so these separate reading a file on disk from reading a
+    # web page.
     triggers=[r"\b(read|contents? of|what does|show me)\b.{0,24}\.\w{1,5}\b",
-              r"\bread\b.{0,20}\b(file|note|txt|md)\b"],
+              r"\bread\b.{0,20}\b(file|note|txt|md)\b",
+              r"\b(read|open|show|print)\b.{0,20}\bpath\b"],
 )
 def read_file(name: str = "", place: str = "", **_) -> Result:
     if not name:

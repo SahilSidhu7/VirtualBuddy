@@ -238,7 +238,10 @@ class PCGraph:
                 "roots": [str(r) for r in roots], "seconds": time.time() - stamp}
 
     def _rebuild_fts(self):
-        self.con.execute("DELETE FROM node_fts")
+        # A contentless FTS5 table rejects DELETE; it takes this command
+        # instead. The first scan worked because the table was empty, so this
+        # only failed on re-scans, which is the common case.
+        self.con.execute("INSERT INTO node_fts(node_fts) VALUES('delete-all')")
         self.con.execute(
             "INSERT INTO node_fts(rowid, name, path) SELECT id, name, path FROM nodes")
         self.con.commit()

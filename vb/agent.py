@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from vb import config
+from vb import config, progress
 from vb.registry import Result
 from vb.router import AUTO_THRESHOLD, Match, Router
 
@@ -19,6 +19,7 @@ class Turn:
     matches: list[Match] = field(default_factory=list)
     result: Result | None = None
     pending: Match | None = None
+    auto: bool = False        # confident enough to run without being asked
 
     @property
     def needs_confirm(self) -> bool:
@@ -47,18 +48,21 @@ class Agent:
             return turn
 
         top = turn.matches[0]
-        auto = config.get("mode") == "auto" and top.score >= AUTO_THRESHOLD
-        if auto and not top.skill.danger:
-            turn.result = self.run(top)
-        else:
-            turn.pending = top
+        # Routing decides; running is the caller's job. Deciding here used to
+        # mean auto mode executed on whatever thread asked, which froze the UI
+        # for the whole of a slow skill.
+        turn.auto = (config.get("mode") == "auto"
+                     and top.score >= AUTO_THRESHOLD
+                     and not top.skill.danger)
+        turn.pending = top
         self.last = turn
         return turn
 
     # -- execution -------------------------------------------------------
-    def run(self, match: Match) -> Result:
+    def run(self, match: Match, on_progress=None) -> Result:
         try:
-            out = match.skill.run(**match.slots)
+            with progress.listening(on_progress):
+                out = match.skill.run(**match.slots)
         except TypeError as exc:           # slot names out of step with the function
             return Result.fail(f"{match.skill.name} couldn't accept those arguments.",
                                str(exc))
@@ -66,12 +70,13 @@ class Agent:
             return Result.fail(f"{match.skill.name} failed.", f"{type(exc).__name__}: {exc}")
         return out if isinstance(out, Result) else Result(text=str(out))
 
-    def confirm(self, turn: Turn | None = None, choice: int = 0) -> Result:
+    def confirm(self, turn: Turn | None = None, choice: int = 0,
+                on_progress=None) -> Result:
         """Run the pending match (or the nth alternative the UI offered)."""
         turn = turn or self.last
         if not turn or not turn.matches:
             return Result.fail("Nothing to run.")
         match = turn.matches[min(choice, len(turn.matches) - 1)]
         turn.pending = None
-        turn.result = self.run(match)
+        turn.result = self.run(match, on_progress=on_progress)
         return turn.result

@@ -18,8 +18,14 @@ BANNER = """VirtualBuddy — type what you want, or:
 """
 
 
+def _report(message: str) -> None:
+    print(f"   … {message}")
+
+
 def _show(turn, agent) -> None:
-    if turn.needs_confirm:
+    if turn.auto:
+        res = agent.confirm(turn, on_progress=_report)
+    elif turn.needs_confirm:
         alts = "".join(
             f"\n   {i}. {m.skill.name}  ({m.score:.2f})"
             for i, m in enumerate(turn.matches[1:], start=1))
@@ -28,9 +34,9 @@ def _show(turn, agent) -> None:
             print(f"   others:{alts}")
         answer = input("   run it? [Y/n/number] ").strip().lower()
         if answer in ("", "y", "yes"):
-            res = agent.confirm(turn)
+            res = agent.confirm(turn, on_progress=_report)
         elif answer.isdigit():
-            res = agent.confirm(turn, choice=int(answer))
+            res = agent.confirm(turn, choice=int(answer), on_progress=_report)
         else:
             print("   skipped.")
             return
@@ -41,7 +47,22 @@ def _show(turn, agent) -> None:
         print("  " + res.detail)
 
 
+def _readable_console() -> None:
+    """Stop the Windows console from killing us over a curly quote.
+
+    cmd.exe defaults to cp1252, and anything the web or a language model hands
+    back is full of characters it cannot encode. Printing one raised
+    UnicodeEncodeError and took the whole answer with it.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _readable_console()
     argv = argv if argv is not None else sys.argv[1:]
     skills = load_all()
     agent = Agent()

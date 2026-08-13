@@ -65,7 +65,9 @@ def _launch(target: str) -> None:
     ["open chrome", "launch spotify", "start notepad", "run the calculator",
      "open vs code", "fire up steam"],
     slots=lambda t: {"target": slots.after(t, OPEN_VERBS)}, tags=["local"],
-    triggers=[r"^\s*(open|launch|start|run|fire up)\b"],
+    # "open chrome" is an app; "open C:/…/readme.md" is a file. The router
+    # replaces a typed path with the token "path", so this declines those.
+    triggers=[r"^\s*(open|launch|start|run|fire up)\b(?!.*\b(path|link)\b)"],
 )
 def open_app(target: str = "", **_) -> Result:
     name = (target or "").strip().lower()

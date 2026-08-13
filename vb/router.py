@@ -22,18 +22,28 @@ TRIGGER_BONUS = 0.22      # a skill's giveaway word is present
 TRIGGER_EXTRA = 0.08      # each further one
 TRIGGER_CAP = 0.34        # never enough to win on keywords alone
 
+# How far ahead an irreversible skill must be before it is offered first.
+# Deleting and reading are one word apart in a sentence full of path characters,
+# and the cost of guessing wrong is not symmetric.
+DANGER_MARGIN = 0.12
+
 
 _URL = re.compile(r"https?://\S+|\b(?:www\.)?[\w-]+\.(?:com|org|net|io|dev|ai|co|in)\b\S*", re.I)
+# A typed path: drive letter, ~, or two or more separated segments.
+_PATH = re.compile(r"(?:[A-Za-z]:[\\/]|~[\\/])[^\s\"']*|[\w.-]+(?:[\\/][\w.-]+){2,}")
 
 
 def normalise(text: str) -> str:
     """What the router actually encodes.
 
-    A pasted URL is 40 characters of noise that swamps the six words of intent
-    around it, so every link collapses to the single token "link" — which is
-    also what the skill phrases say.
+    A pasted URL or a long path is dozens of characters of noise that swamp the
+    six words of intent around them, so both collapse to a single token. Before
+    this, "read C:/Users/…/Temp/tmp_187j5zn/probe.txt" scored read_file at 0.35
+    and delete_file at 0.30 purely on path characters, and a near-tie is no way
+    to decide whether to open a file or bin it.
     """
-    return _URL.sub(" link ", text.lower()).strip()
+    clean = _URL.sub(" link ", text.lower())
+    return _PATH.sub(" path ", clean).strip()
 
 
 @dataclass
@@ -41,6 +51,20 @@ class Match:
     skill: Skill
     score: float
     slots: dict
+
+
+def _safety_first(matches: list[Match]) -> list[Match]:
+    """Demote an irreversible skill that only just won.
+
+    It stays on the list as an alternative the user can pick; it just does not
+    get to be the default when something reversible scored nearly as well.
+    """
+    if len(matches) < 2 or not matches[0].skill.danger:
+        return matches
+    for i, other in enumerate(matches[1:], start=1):
+        if not other.skill.danger and matches[0].score - other.score < DANGER_MARGIN:
+            return [other] + matches[:i] + matches[i + 1:]
+    return matches
 
 
 class Router:
@@ -92,7 +116,7 @@ class Router:
                 break
             sk = self.skills[name]
             out.append(Match(skill=sk, score=score, slots=sk.extract(prompt)))
-        return out
+        return _safety_first(out)
 
     def best(self, prompt: str) -> Match | None:
         ranked = self.rank(prompt, top=1)

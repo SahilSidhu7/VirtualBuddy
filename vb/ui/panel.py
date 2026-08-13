@@ -7,6 +7,7 @@ keeps animating while a page is being scraped.
 from __future__ import annotations
 
 import threading
+import time
 import tkinter as tk
 
 from vb import config, llm
@@ -15,9 +16,14 @@ from vb.ui import theme as themes
 from vb.ui.theme import Theme
 from vb.ui.widgets import Button, Meter, drag_by, font
 
+import re
+
 W, H = 420, 460
 PAD = 14
 PROP_TEXT_W = 178      # panel width minus the meter and the two buttons
+
+MD_BOLD = re.compile(r"\*\*(.+?)\*\*", re.S)
+MD_HEADING = re.compile(r"^#{1,6}\s*")
 
 
 def _ellipsis(text: str, limit: int) -> str:
@@ -40,6 +46,9 @@ class Panel(tk.Toplevel):
         self.theme: Theme = themes.get(config.get("avatar"))
         self.turn: Turn | None = None
         self._busy = False
+        self._started: float | None = None
+        self._clock_job = None
+        self._steps: list[str] = []
 
         self.overrideredirect(True)
         self.attributes("-topmost", True)
@@ -90,9 +99,10 @@ class Panel(tk.Toplevel):
         self.send_btn = Button(self.well, "Ask", self.submit, t, primary=True,
                                width=58, height=26, size=9)
         self.send_btn.pack(side="right", padx=6, pady=6)
-        self.mic_btn = Button(self.well, "Talk", self.listen, t,
-                              width=52, height=26, size=9)
-        self.mic_btn.pack(side="right", padx=(0, 2), pady=6)
+        # No microphone button yet. Voice worked, but "press Talk, wait for a
+        # download, hope the wake word lands" is not a feature, it is a chore.
+        # vb/voice.py stays; it comes back when the setup is one click and the
+        # buddy can answer out loud.
 
         # proposal strip — only visible when a match is waiting on a yes
         # Buttons are packed before the label so a long skill signature can
@@ -151,6 +161,9 @@ class Panel(tk.Toplevel):
         self.out.tag_configure("mono", font=(t.mono, 9), foreground=t.text_dim)
         self.out.tag_configure("path", font=(t.mono, 8), foreground=t.text_faint,
                                spacing3=6)
+        self.out.tag_configure("step", foreground=t.accent, font=font(t, 10))
+        self.out.tag_configure("clock", font=(t.mono, 9), foreground=t.text_faint)
+        self.out.tag_configure("strong", foreground=t.text, font=font(t, 10, "bold"))
 
     # -- states ----------------------------------------------------------
     def show_empty(self):
@@ -167,13 +180,58 @@ class Panel(tk.Toplevel):
         self.out.configure(state="disabled")
 
     def show_working(self, what: str):
+        """Start the working view: a title, a live step line, a ticking clock.
+
+        The clock matters as much as the steps. A skill that reports nothing
+        still has to look alive, and "12s" moving is the difference between
+        waiting and force-quitting.
+        """
+        self._steps = []
+        self._started = time.monotonic()
         self.out.configure(state="normal")
         self.out.delete("1.0", "end")
         self.out.insert("end", f"{what}\n", "head")
-        self.out.insert("end", "Working. This can take a moment on slow pages.\n", "dim")
+        self.out.insert("end", "Starting…\n", "step")
+        self.out.insert("end", "0s\n", "clock")
+        self.out.configure(state="disabled")
+        self._tick_clock()
+
+    def _tick_clock(self):
+        if not self._started:
+            return
+        elapsed = time.monotonic() - self._started
+        self.out.configure(state="normal")
+        try:
+            self.out.delete("clockline.first", "clockline.last")
+        except tk.TclError:
+            pass
+        ranges = self.out.tag_ranges("clock")
+        if ranges:
+            self.out.delete(ranges[0], ranges[1])
+            self.out.insert(ranges[0], f"{elapsed:.0f}s\n", "clock")
+        self.out.configure(state="disabled")
+        self._clock_job = self.after(1000, self._tick_clock)
+
+    def step(self, message: str):
+        """A progress line from the running skill."""
+        if not self._started:
+            return
+        self._steps.append(message)
+        self.out.configure(state="normal")
+        ranges = self.out.tag_ranges("step")
+        if ranges:
+            self.out.delete(ranges[0], ranges[1])
+            self.out.insert(ranges[0], message + "\n", "step")
         self.out.configure(state="disabled")
 
-    def show_result(self, res):
+    def _stop_clock(self):
+        if self._clock_job:
+            self.after_cancel(self._clock_job)
+            self._clock_job = None
+        self._started = None
+
+    def show_result(self, res, took: float | None = None):
+        self._stop_clock()
         self.out.configure(state="normal")
         self.out.delete("1.0", "end")
         head, _, rest = res.text.partition("\n")
@@ -188,11 +246,29 @@ class Panel(tk.Toplevel):
                     tag = "mono"
                 else:
                     tag = ()
-                self.out.insert("end", line + "\n", tag)
+                self._insert_rich(line + "\n", tag)
         if res.detail:
             self.out.insert("end", "\n" + res.detail + "\n", "dim")
+        if took and took >= 2:
+            self.out.insert("end", f"\ntook {took:.1f}s\n", "clock")
         self.out.configure(state="disabled")
         self.out.see("1.0")
+
+    def _insert_rich(self, line: str, tag):
+        """Write a line, rendering the little markdown that reaches us.
+
+        Sources are the web and a language model, and both produce **bold** and
+        leading #. Printing the asterisks verbatim looks like a bug, and a full
+        markdown parser is far more than this needs.
+        """
+        line = MD_HEADING.sub("", line)
+        parts = MD_BOLD.split(line)
+        for i, part in enumerate(parts):
+            if not part:
+                continue
+            bold = i % 2 == 1
+            tags = ("strong",) if bold else ((tag,) if tag else ())
+            self.out.insert("end", part, tags)
 
     def _show_proposal(self, turn: Turn):
         top = turn.matches[0]
@@ -225,7 +301,9 @@ class Panel(tk.Toplevel):
         self.on_state("thinking")
         turn = self.agent.handle(prompt)
         self.turn = turn
-        if turn.needs_confirm:
+        if turn.auto:
+            self.run_pending()
+        elif turn.needs_confirm:
             self._show_proposal(turn)
             self.out.configure(state="normal")
             self.out.delete("1.0", "end")
@@ -238,63 +316,6 @@ class Panel(tk.Toplevel):
             self.on_state("talk")
             self.after(1600, lambda: self.on_state("idle"))
 
-    def listen(self):
-        """Push to talk: record one utterance, drop it in the box, ask."""
-        from vb import voice
-        if self._busy:
-            return
-        state = voice.status()
-        if state["state"] != "ready":
-            self._offer_voice_setup(state)
-            return
-        self._busy = True
-        self.mic_btn.set_text("…")
-        self.on_state("listening")
-
-        def work():
-            heard = voice.listen_once()
-            self.after(0, done, heard)
-
-        def done(heard: str):
-            self._busy = False
-            self.mic_btn.set_text("Talk")
-            self.on_state("idle")
-            if not heard:
-                self.show_result(_note("Didn't catch that.",
-                                       "Press Talk and speak after the sprite blinks."))
-                return
-            self.entry.delete(0, "end")
-            self.entry.insert(0, heard)
-            self.submit()
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _offer_voice_setup(self, state: dict):
-        """Voice isn't ready — say what's missing and set it up on one click."""
-        from vb import voice
-        self.out.configure(state="normal")
-        self.out.delete("1.0", "end")
-        self.out.insert("end", "Voice needs a one-time setup\n", "head")
-        self.out.insert("end", state["message"] + "\n", "dim")
-        self.out.insert("end", "Setting it up now. This runs once.\n", "dim")
-        self.out.configure(state="disabled")
-        self._busy = True
-        self.on_state("working")
-
-        def work():
-            if state["fix"] == "pip":
-                voice.install_packages()
-            ok = voice.download_model() is not None if voice.find_model() is None else True
-            self.after(0, done, ok and voice.packages_present())
-
-        def done(ok: bool):
-            self._busy = False
-            self.on_state("idle")
-            self.show_result(_note(
-                "Voice is ready. Press Talk." if ok else "Voice setup failed.",
-                "" if ok else "Install manually: pip install vosk sounddevice"))
-
-        threading.Thread(target=work, daemon=True).start()
 
     def run_pending(self, choice: int = 0):
         if not self.turn or self._busy:
@@ -305,14 +326,20 @@ class Panel(tk.Toplevel):
         self.on_state("working")
         self._busy = True
         turn = self.turn
+        started = time.monotonic()
+
+        def report(message: str):
+            # Called from the worker thread; Tk is only safe from its own.
+            self.after(0, self.step, message)
 
         def work():
-            res = self.agent.confirm(turn, choice=choice)
+            res = self.agent.confirm(turn, choice=choice, on_progress=report)
             self.after(0, done, res)
 
         def done(res):
             self._busy = False
-            self.show_result(res)
+            self._stop_clock()
+            self.show_result(res, took=time.monotonic() - started)
             self.on_state("talk")
             self.after(1800, lambda: self.on_state("idle"))
 
@@ -364,7 +391,7 @@ class Panel(tk.Toplevel):
         self.scroll.configure(troughcolor=t.base, bg=t.line)
         self.foot.configure(bg=t.base, fg=t.text_faint)
         self.avatar_btn.set_text(t.label)
-        for w in (self.mode_btn, self.avatar_btn, self.send_btn, self.mic_btn,
+        for w in (self.mode_btn, self.avatar_btn, self.send_btn,
                   self.run_btn, self.alt_btn):
             w.restyle(t)
         self.meter.restyle(t)

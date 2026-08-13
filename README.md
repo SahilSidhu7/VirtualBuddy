@@ -123,11 +123,35 @@ of VRAM, so a 4GB card handles it.
 Without it, every skill still works: you get the extracted text and the sources
 instead of a synthesis. The right-click menu downloads the model for you.
 
-## Voice
+## Progress, not spinners
 
-Press **Talk** and speak. Recognition is offline, via Vosk. The first press
-installs `vosk` and `sounddevice` and downloads a 40MB English model into
-`~/.virtualbuddy/models`.
+A skill that reads four websites takes a few seconds, and a silent window looks
+broken. Skills report what they are doing through `vb/progress.py`, and the
+panel shows the current step plus a running clock:
+
+```
+research
+Reading 2 of 4: circuitlabs.net
+6s
+```
+
+Work runs on a worker thread in both manual and auto mode, so the window stays
+responsive and the buddy keeps animating while it happens.
+
+Adding progress to a skill is one call, with no change to its signature:
+
+```python
+from vb import progress
+
+progress.say("Searching…")
+```
+
+## Voice (later)
+
+`vb/voice.py` does offline speech-to-text via Vosk and works, but the setup is
+a chore and the buddy cannot answer out loud yet, so the button is not in the
+app. It comes back when it is one click and two-way. Text is the supported way
+to talk to it today.
 
 ## Skills
 

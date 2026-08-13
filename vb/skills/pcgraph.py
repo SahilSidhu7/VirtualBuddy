@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vb import slots
+from vb import progress, slots
 from vb.pc import graph as G
 from vb.registry import Result, skill
 
@@ -41,7 +41,12 @@ def _listing(nodes: list[G.Node], *, show_size: bool = False,
               r"\b(index|reindex)\b"],
 )
 def index_pc(**_) -> Result:
-    stats = G.graph().scan()
+    def report(files, dirs, where):
+        progress.say(f"{files:,} files so far · {Path(where).name or where}")
+
+    progress.say("Walking your folders…")
+    stats = G.graph().scan(on_progress=report)
+    progress.say("Building the search index…")
     roots = "\n".join(f"  {r}" for r in stats["roots"])
     return Result(
         text=f"Indexed {stats['files']:,} files in {stats['dirs']:,} folders "

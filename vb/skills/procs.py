@@ -33,7 +33,9 @@ def _missing() -> Result:
 def _sample(limit: int = 60) -> list[dict]:
     """One measured pass over every process, grouped by executable name."""
     import time
+    from vb import progress
     psutil = _psutil()
+    progress.say("Watching every process for a moment…")
     for proc in psutil.process_iter(["name"]):
         try:
             proc.cpu_percent(None)                 # prime; result discarded
