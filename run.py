@@ -35,6 +35,16 @@ def selftest() -> int:
               "</p></article></body></html>")
     text = extract.to_text(sample, "https://example.com/tides")
 
+    # Pillow is what composites sprites onto the transparency key. It went
+    # missing from requirements once; opening a frame here is how that gets
+    # caught before anyone downloads a build with no buddy in it.
+    try:
+        from PIL import Image
+        with Image.open(asset_root() / "duck" / "idle_0.png") as frame:
+            pillow = f"{frame.width}x{frame.height} {frame.mode}"
+    except Exception as exc:
+        pillow = f"BROKEN ({type(exc).__name__}: {exc})"
+
     print(f"version   {__version__}")
     print(f"frozen    {bool(getattr(sys, 'frozen', False))}")
     print(f"skills    {len(skills)}")
@@ -42,6 +52,7 @@ def selftest() -> int:
           f"({match.score:.2f})" if match else "route     NONE")
     print(f"sprites   {asset_root()} -> {len(sprites)} duck idle frames")
     print(f"extract   {len(text.split())} words from a sample page")
+    print(f"pillow    {pillow}")
 
     problems = []
     if len(skills) < 20:
@@ -52,6 +63,8 @@ def selftest() -> int:
         problems.append("no sprites found")
     if "tide turns" not in text:
         problems.append("page extraction returned nothing usable")
+    if "BROKEN" in pillow:
+        problems.append("Pillow cannot open a sprite, so the buddy will not draw")
     for problem in problems:
         print(f"FAIL      {problem}")
     print("ok" if not problems else "FAILED")

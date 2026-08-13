@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-REQUIRED = ("version", "skills", "sprites", "extract", "ok")
+REQUIRED = ("version", "skills", "sprites", "extract", "pillow", "ok")
 
 
 def main(argv: list[str]) -> int:

@@ -4,6 +4,10 @@
 numpy>=1.24
 httpx>=0.27
 
+# The desktop sprite composites its frames onto the transparency colour key,
+# and tkinter's own PhotoImage cannot do that.
+pillow>=10.0
+
 # Web reading. trafilatura gives clean article text; without it we fall back
 # to a plain tag-stripper, so it is nice-to-have rather than required.
 trafilatura>=1.8
