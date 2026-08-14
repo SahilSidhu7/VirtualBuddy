@@ -284,6 +284,30 @@ class Panel(tk.Toplevel):
     def _hide_proposal(self):
         self.proposal.pack_forget()
 
+    def _show_plan(self, plan, prompt: str):
+        """A multi-step answer: show the steps, then let the user start it."""
+        self.prop_name.configure(text=f"{len(plan.steps)} steps")
+        self.prop_args.configure(text=_ellipsis(plan.steps[0].describe(), 28))
+        self.meter.set(1.0)
+        self.alt_btn.set_text("No thanks")
+        self.run_btn.set_text("Run all")
+        self.proposal.pack(fill="x", padx=PAD, pady=(10, 0), before=self.out.master)
+
+        self.out.configure(state="normal")
+        self.out.delete("1.0", "end")
+        self.out.insert("end", f"“{prompt}”\n", "head")
+        self.out.insert("end", "Here is what I would do:\n\n", "dim")
+        for i, step in enumerate(plan.steps, start=1):
+            self.out.insert("end", f"  {i}. {step.describe()}\n", "mono")
+            if step.why:
+                self.out.insert("end", f"      {step.why}\n", "path")
+        if plan.cannot:
+            self.out.insert("end", f"\nWhat I cannot do: {plan.cannot}\n", "dim")
+        if plan.note:
+            self.out.insert("end", f"{plan.note}\n", "dim")
+        self.out.configure(state="disabled")
+        self.on_state("idle")
+
     # -- actions ---------------------------------------------------------
     def _on_return(self, _event):
         if not self.entry.get().strip() and self.turn and self.turn.matches \
@@ -299,8 +323,36 @@ class Panel(tk.Toplevel):
         self.entry.delete(0, "end")
         self._hide_proposal()
         self.on_state("thinking")
-        turn = self.agent.handle(prompt)
-        self.turn = turn
+
+        # Routing is instant, but the planner asks the model, which is not.
+        # Run the whole thing off-thread and show the working view meanwhile.
+        self.show_working(prompt)
+        self._busy = True
+        started = time.monotonic()
+
+        def work():
+            turn = self.agent.handle(
+                prompt, on_progress=lambda m: self.after(0, self.step, m))
+            self.after(0, routed, turn)
+
+        def routed(turn):
+            self._busy = False
+            self._stop_clock()
+            self.turn = turn
+            if turn.plan:
+                self._show_plan(turn.plan, prompt)
+            elif turn.auto:
+                self.run_pending()
+            elif turn.needs_confirm:
+                self._propose(turn, prompt)
+            elif turn.result:
+                self.show_result(turn.result, took=time.monotonic() - started)
+                self.on_state("talk")
+                self.after(1600, lambda: self.on_state("idle"))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _propose(self, turn: Turn, prompt: str):
         if turn.auto:
             self.run_pending()
         elif turn.needs_confirm:
@@ -320,6 +372,8 @@ class Panel(tk.Toplevel):
     def run_pending(self, choice: int = 0):
         if not self.turn or self._busy:
             return
+        if self.turn.plan:
+            return self.run_plan()
         self._hide_proposal()
         skill = self.turn.matches[min(choice, len(self.turn.matches) - 1)].skill
         self.show_working(skill.name.replace("_", " "))
@@ -345,8 +399,41 @@ class Panel(tk.Toplevel):
 
         threading.Thread(target=work, daemon=True).start()
 
+    def run_plan(self):
+        """Run every step of the plan, in order."""
+        turn = self.turn
+        if not turn or not turn.plan or self._busy:
+            return
+        self._hide_proposal()
+        self.run_btn.set_text("Run")
+        self.show_working(f"{len(turn.plan.steps)} steps")
+        self.on_state("working")
+        self._busy = True
+        started = time.monotonic()
+
+        def work():
+            res = self.agent.run_plan(
+                turn, on_progress=lambda m: self.after(0, self.step, m))
+            self.after(0, done, res)
+
+        def done(res):
+            self._busy = False
+            self._stop_clock()
+            self.show_result(res, took=time.monotonic() - started)
+            self.on_state("talk")
+            self.after(1800, lambda: self.on_state("idle"))
+
+        threading.Thread(target=work, daemon=True).start()
+
     def next_match(self):
         """Cycle the proposal through the alternatives the router offered."""
+        if self.turn and self.turn.plan:      # "No thanks" on a plan
+            self.turn.plan = None
+            self._hide_proposal()
+            self.run_btn.set_text("Run")
+            self.show_result(_note("Dropped that plan.",
+                                   "Ask again, or say it as one thing at a time."))
+            return
         if not self.turn or len(self.turn.matches) < 2:
             return
         self.turn.matches = self.turn.matches[1:] + self.turn.matches[:1]

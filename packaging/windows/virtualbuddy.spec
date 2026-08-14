@@ -20,6 +20,7 @@ a = Analysis(
     hiddenimports=[
         "vb.skills.apps", "vb.skills.filework", "vb.skills.pcgraph",
         "vb.skills.procs", "vb.skills.todo", "vb.skills.websearch",
+        "vb.planner", "vb.progress", "vb.ui.splash",
         "PIL.ImageTk", "PIL._tkinter_finder",
     ],
     hookspath=[],

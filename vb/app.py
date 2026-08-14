@@ -22,8 +22,8 @@ def _note(text: str, detail: str = ""):
 
 
 class App:
-    def __init__(self):
-        self.root = tk.Tk()
+    def __init__(self, root: tk.Tk | None = None):
+        self.root = root or tk.Tk()
         self.root.withdraw()
         self.root.title("VirtualBuddy")
 
@@ -117,7 +117,30 @@ class App:
 
 
 def main() -> int:
-    App().run()
+    """Get the model ready behind a progress bar, then bring the buddy out."""
+    from vb.ui.splash import Splash
+
+    root = tk.Tk()
+    root.withdraw()
+    holder: dict[str, App] = {}
+
+    def start(model_ready: bool = True):
+        app = App(root)
+        holder["app"] = app
+        if not model_ready:
+            app.panel.show_at(*app.pet.anchor())
+            app.visible = True
+            app.panel.show_result(_note(
+                "Running without a model.",
+                "Web answers will be raw page text until one is set up. "
+                "Right click me to try again."))
+
+    if llm.enabled() and config.get("skip_splash"):
+        start()
+    else:
+        Splash(root, on_done=start, on_skip=lambda: start(False))
+
+    root.mainloop()
     return 0
 
 

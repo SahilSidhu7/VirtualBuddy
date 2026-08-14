@@ -23,7 +23,20 @@ def _report(message: str) -> None:
 
 
 def _show(turn, agent) -> None:
-    if turn.auto:
+    if turn.plan:
+        print(f"→ {len(turn.plan.steps)} steps:")
+        for i, step in enumerate(turn.plan.steps, start=1):
+            print(f"   {i}. {step.describe()}")
+        if turn.plan.cannot:
+            print(f"   cannot: {turn.plan.cannot}")
+        if turn.plan.note:
+            print(f"   {turn.plan.note}")
+        if input("   run them? [Y/n] ").strip().lower() in ("", "y", "yes"):
+            res = agent.run_plan(turn, on_progress=_report)
+        else:
+            print("   skipped.")
+            return
+    elif turn.auto:
         res = agent.confirm(turn, on_progress=_report)
     elif turn.needs_confirm:
         alts = "".join(

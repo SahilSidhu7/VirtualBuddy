@@ -55,6 +55,29 @@ them by cosine similarity, and the best skill wins.
 * **Auto mode** runs the top match when it scores above `0.45`. Skills marked
   dangerous still ask.
 
+### More than one thing at a time
+
+"Open the browser and start applying to the best jobs" is two jobs, and routing
+it to one skill gets you half of it. When a sentence has two verbs, or nothing
+matches well, the model turns it into a plan of skills that actually exist, with
+arguments it can actually fill. You see the steps before anything runs.
+
+```
+2 steps                                    [ No thanks ] [ Run all ]
+  1. web search (query=best jobs available)
+  2. open site (url=…)
+What I cannot do: I can find and open the pages, but I cannot sign in, fill in
+an application or pay for anything. That part is yours.
+```
+
+That last line is not the model being modest, it is a rule: requests that
+mention applying, signing in, checkout or payment always get it.
+
+The model proposes, you approve, the agent runs. It never executes anything
+itself, and a step whose argument would have been "the first result" is dropped
+rather than run with those words, because steps do not yet pass results to each
+other.
+
 Arguments come from `vb/slots.py`: strip the words that made the skill match,
 keep what is left. `open spotify` gives `target=spotify`, `search the web for
 tide times` gives `query=tide times`.
@@ -114,14 +137,30 @@ When you give a bare filename, it's matched against the graph — but only by
 exact name, never fuzzily. A fuzzy match is right for *find my tax pdf* and
 catastrophic for *append this to X*.
 
-## Smart mode (optional)
+## The model
 
-If [Ollama](https://ollama.com) is running with `qwen3:4b`, the research and
-read skills use it to write up what they found. That model runs in about 2.6GB
-of VRAM, so a 4GB card handles it.
+VirtualBuddy needs a local model, and sets one up on first run behind a
+progress bar: it installs [Ollama](https://ollama.com) if it is missing,
+downloads a model, and loads it into the graphics card so your first question
+is not the slow one.
 
-Without it, every skill still works: you get the extracted text and the sources
-instead of a synthesis. The right-click menu downloads the model for you.
+Which model depends on your card, measured with `nvidia-smi` rather than
+Windows, which reports an 8GB card as 4GB:
+
+| Video memory | Model |
+|---|---|
+| 14GB and up | `qwen2.5:14b` |
+| 8GB | `llama3.1:8b` |
+| 6GB | `qwen2.5:7b` |
+| 4GB | `qwen3:4b` |
+| less, or no GPU | `qwen3:1.7b` |
+
+Pick a different one by setting `llm_model` and `llm_model_pinned: true` in
+`~/.virtualbuddy/config.json`.
+
+Without a model you can still run everything local (files, processes, the file
+graph), but web answers degrade to scraped page text, and the buddy says so
+rather than pretending that was the answer.
 
 ## Progress, not spinners
 

@@ -82,9 +82,16 @@ def http_get(url: str) -> tuple[int, str]:
     return r.status_code, r.text
 
 
-def get(url: str, *, force_browser: bool = False) -> Page:
-    """Fetch and extract one page, escalating to a browser if needed."""
+def get(url: str, *, force_browser: bool = False, allow_browser: bool = True) -> Page:
+    """Fetch and extract one page, escalating to a browser if needed.
+
+    `allow_browser=False` is for callers reading several pages in a row: one
+    stubborn source is not worth twenty five seconds of Chromium when three
+    others already answered.
+    """
     tier = config.get("browser_tier")
+    if not allow_browser and not force_browser:
+        tier = "http"
     raw, status = "", 0
 
     if not force_browser:

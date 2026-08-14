@@ -10,6 +10,25 @@ def _host(url: str) -> str:
     from urllib.parse import urlparse
     return urlparse(url).netloc.replace("www.", "") or url
 
+
+def _no_model_note(pages) -> str:
+    """What to say when there is no model to write the answer.
+
+    Dumping the scraped text was the old behaviour and it is worse than
+    useless: the user asked a question and got a wall of website. Say plainly
+    that the model is missing, and give the openings so the sources are still
+    usable.
+    """
+    why = llm.last_error() or llm.status()["message"]
+    lines = [f"I read {len(pages)} pages but cannot write them up: {why}",
+             "Right click me and set the model up, and this becomes an answer.",
+             ""]
+    for page in pages:
+        lines.append(f"**{page.title}** — {_host(page.url)}")
+        lines.append(page.summary(280))
+        lines.append("")
+    return "\n".join(lines)
+
 SEARCH_VERBS = ("search", "google", "find", "look", "lookup", "duckduckgo", "web")
 READ_VERBS = ("read", "open", "fetch", "scrape", "get", "summarise", "summarize")
 
@@ -69,13 +88,23 @@ def read_page(url: str = "", topic: str = "", **_) -> Result:
     head = f"{page.title}\n{page.url}  ({page.words} words, via {page.via})"
 
     if llm.enabled():
-        progress.say("Summarising…")
+        progress.say("Reading it…")
     brief = llm.ask(
-        f"Summarise this page in 6 bullet points. Facts only, no preamble.\n\n"
-        f"{page.text[:6000]}",
-        system="You summarise web pages concisely and never invent detail.")
-    body = brief or page.summary(1500)
-    return Result(text=f"{head}\n\n{body}", data=page)
+        f"Page:\n{page.text[:7000]}\n\n"
+        + (f"The user asked: {topic}\nAnswer that from the page, then add "
+           "up to five bullets of anything else worth knowing.\n" if topic else
+           "Say in one sentence what this page is, then up to six bullets of the "
+           "specifics: numbers, names, dates, conclusions.\n")
+        + "Never copy whole sentences, never describe the layout of the page.",
+        system="You read a web page and report what it actually says, briefly.",
+        max_tokens=650)
+    if not brief:
+        why = llm.last_error() or llm.status()["message"]
+        return Result(text=f"{head}\n\nI cannot summarise this: {why}\n\n"
+                           f"{page.summary(900)}",
+                      detail="Set the model up and you get an answer instead of "
+                             "the page text.", data=page)
+    return Result(text=f"{head}\n\n{brief}", data=page)
 
 
 def _research_slots(text: str) -> dict:
@@ -108,11 +137,13 @@ def research(topic: str = "", sources: int = 4, **_) -> Result:
     pages, notes = [], []
     for i, hit in enumerate(hits[:wanted], start=1):
         progress.say(f"Reading {i} of {wanted}: {_host(hit.url)}")
-        page = fetch.get(hit.url)
+        page = fetch.get(hit.url, allow_browser=False)
         if page.words < 80:
             continue
         pages.append(page)
-        notes.append(f"### {page.title}\n{page.url}\n{page.text[:3500]}")
+        # Trimmed hard: four sources at 3500 characters each made the model
+        # spend most of its time reading rather than answering.
+        notes.append(f"### {page.title}\n{page.url}\n{page.text[:1800]}")
     if not pages:
         return Result.fail("Every source failed to load.",
                            "\n".join(h.url for h in hits[:3]))
@@ -121,15 +152,19 @@ def research(topic: str = "", sources: int = 4, **_) -> Result:
                  else "Pulling out the useful parts…")
     joined = "\n\n".join(notes)
     write_up = llm.ask(
-        f"Topic: {topic}\n\nSources:\n{joined}\n\n"
-        "Write a briefing: 5-8 bullets of what the sources agree on, then a short "
-        "'worth knowing' line for anything they disagree about. Cite by site name.",
-        system="You are a research assistant. Use only the supplied sources.",
-        max_tokens=900)
+        f"Question: {topic}\n\nSources:\n{joined}\n\n"
+        "Answer the question using only these sources. Rules:\n"
+        "- Open with one sentence that actually answers it.\n"
+        "- Then at most six short bullets of specifics: numbers, names, prices, dates.\n"
+        "- Name the site in brackets after a claim, like (jeffgeerling.com).\n"
+        "- If the sources disagree, say so in one line.\n"
+        "- Never copy sentences out of the sources, and never describe the page.",
+        system="You answer questions from supplied sources, briefly and concretely. "
+               "You never pad, and you never quote at length.",
+        max_tokens=700)
 
-    if not write_up:                       # extractive fallback, no LLM needed
-        write_up = "\n\n".join(
-            f"**{p.title}** — {p.url}\n{p.summary(600)}" for p in pages)
+    if not write_up:
+        write_up = _no_model_note(pages)
 
     src = "\n".join(f"- {p.title} — {p.url}" for p in pages)
     return Result(text=f"Research: {topic}\n\n{write_up}\n\nSources:\n{src}", data=pages)

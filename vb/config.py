@@ -14,8 +14,12 @@ DEFAULTS = {
     "avatar": "duck",          # duck | elf | crab
     "voice_input": False,      # vosk wake-word listening
     "speak": False,            # read replies aloud
-    "llm": "auto",             # auto = use Ollama if it's running, off = never
-    "llm_model": "qwen3:4b",
+    # The model is not optional any more: without one, web answers are just
+    # scraped text. Empty means "pick the best one this machine can run", which
+    # llm.recommended_model() decides from the amount of video memory.
+    "llm_model": "",
+    "llm_model_pinned": False,   # True once the user chooses one by hand
+    "skip_splash": False,        # set once a model is known good
     "browser_tier": "auto",    # auto = fall back to Playwright when HTTP fails
 }
 

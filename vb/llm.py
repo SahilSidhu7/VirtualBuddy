@@ -1,86 +1,196 @@
-"""Optional local LLM, spoken to over Ollama's HTTP API.
+"""The local model, spoken to over Ollama's HTTP API.
 
-Nothing in the app requires this. Skills call `ask()` and get None when no
-model is available, then fall back to their extractive path. The default model
-is chosen to fit a 4GB card: qwen3:4b at Q4 is ~2.6GB of VRAM.
+VirtualBuddy needs a model. Without one the web skills can only hand back the
+text they scraped, which is what a page looks like, not an answer.
+
+Two rules learned the hard way:
+
+* Match model names exactly. A prefix match once made `qwen3:4b` "installed"
+  because `qwen3:1.7b` was present. The app reported itself ready, every
+  request 404ed, and every skill quietly fell back to raw text.
+* Never fail silently. `ask()` records why it failed so the UI can say so.
 """
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import urllib.error
 import urllib.request
 
 from vb import config
 
 HOST = "http://127.0.0.1:11434"
-TIMEOUT = 120
+TIMEOUT = 180
+KEEP_ALIVE = "30m"          # keep the model resident between questions
+
+# Best model per graphics card, largest first. Sizes are the download; a Q4
+# model needs roughly its file size in VRAM plus a little for context.
+LADDER = [
+    (13000, "qwen2.5:14b", "14B, for cards with 14GB or more"),
+    (7000, "llama3.1:8b", "8B, the sweet spot on an 8GB card"),
+    (5000, "qwen2.5:7b", "7B, comfortable on 6GB"),
+    (3500, "qwen3:4b", "4B, fits a 4GB card"),
+    (0, "qwen3:1.7b", "1.7B, for CPU or a very small card"),
+]
 
 _state: dict = {}
+_last_error: str | None = None
 
 
-def _post(path: str, payload: dict, timeout: int = TIMEOUT) -> dict | None:
-    req = urllib.request.Request(
-        HOST + path, data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
-    )
+# ---------------------------------------------------------------- hardware
+def vram_mb() -> int:
+    """Usable video memory in MB. 0 when there is no usable GPU.
+
+    nvidia-smi is asked first because Windows reports AdapterRAM as a 32 bit
+    value: an 8GB RTX 4060 shows up as 4GB, which would pick a needlessly
+    small model.
+    """
+    if "vram" in _state:
+        return _state["vram"]
+    total = 0
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read())
-    except Exception:
-        return None
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=8,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if out.returncode == 0:
+            total = max(int(line) for line in out.stdout.split() if line.isdigit())
+    except (OSError, ValueError, subprocess.SubprocessError):
+        total = 0
+    if not total and sys.platform == "win32":
+        try:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "(Get-CimInstance Win32_VideoController | "
+                 "Measure-Object AdapterRAM -Maximum).Maximum"],
+                capture_output=True, text=True, timeout=15,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            total = int(out.stdout.strip()) // (1024 * 1024)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            total = 0
+    _state["vram"] = total
+    return total
+
+
+def recommended_model() -> str:
+    """The best model this machine should run."""
+    chosen = config.get("llm_model")
+    if chosen and config.get("llm_model_pinned"):
+        return chosen
+    have = vram_mb()
+    for need, name, _blurb in LADDER:
+        if have >= need:
+            return name
+    return LADDER[-1][1]
+
+
+# ------------------------------------------------------------------ server
+def _get(path: str, timeout: float = 2.0):
+    with urllib.request.urlopen(HOST + path, timeout=timeout) as r:
+        return json.loads(r.read())
 
 
 def running() -> bool:
-    """Is an Ollama server up? Cached per process after the first success."""
-    if _state.get("running"):
-        return True
     try:
-        with urllib.request.urlopen(HOST + "/api/tags", timeout=1.5) as r:
-            _state["models"] = [m["name"] for m in json.loads(r.read()).get("models", [])]
-            _state["running"] = True
-            return True
+        _state["models"] = [m["name"] for m in _get("/api/tags").get("models", [])]
+        return True
     except Exception:
+        _state.pop("models", None)
         return False
 
 
 def models() -> list[str]:
-    return _state.get("models", []) if running() else []
+    if "models" not in _state:
+        running()
+    return _state.get("models", [])
 
 
-def has_model() -> bool:
-    want = config.get("llm_model")
-    return any(m == want or m.startswith(want.split(":")[0]) for m in models())
+def installed(model: str) -> bool:
+    """Exact match, or the same model with the default :latest tag."""
+    have = models()
+    return model in have or (":" not in model and f"{model}:latest" in have)
+
+
+def ollama_installed() -> bool:
+    from shutil import which
+    if which("ollama"):
+        return True
+    from pathlib import Path
+    return (Path.home() / "AppData/Local/Programs/Ollama/ollama.exe").exists()
+
+
+def start_server() -> bool:
+    """Launch `ollama serve` if it is installed but not answering."""
+    if running():
+        return True
+    if not ollama_installed():
+        return False
+    try:
+        subprocess.Popen(["ollama", "serve"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except OSError:
+        return False
+    import time
+    for _ in range(20):
+        time.sleep(0.5)
+        if running():
+            return True
+    return False
 
 
 def enabled() -> bool:
-    """True when a skill may actually use the LLM."""
-    return config.get("llm") != "off" and running() and has_model()
+    return running() and installed(config.get("llm_model") or recommended_model())
 
 
 def status() -> dict:
-    """For the settings UI: what's missing, if anything."""
-    if config.get("llm") == "off":
-        return {"state": "off", "message": "Smart mode disabled in settings."}
+    model = config.get("llm_model") or recommended_model()
+    if not ollama_installed():
+        return {"state": "no_ollama", "model": model,
+                "message": "Ollama is not installed.", "fix": "install_ollama"}
     if not running():
-        return {"state": "no_server", "message": "Ollama isn't running.",
-                "fix": "install_ollama"}
-    if not has_model():
-        return {"state": "no_model",
-                "message": f"Model {config.get('llm_model')} not downloaded.",
-                "fix": "pull_model"}
-    return {"state": "ready", "message": f"Smart mode on ({config.get('llm_model')})."}
+        return {"state": "no_server", "model": model,
+                "message": "Ollama is installed but not running.", "fix": "start_server"}
+    if not installed(model):
+        return {"state": "no_model", "model": model,
+                "message": f"{model} is not downloaded yet.", "fix": "pull_model"}
+    return {"state": "ready", "model": model, "message": f"Ready ({model})."}
+
+
+# -------------------------------------------------------------- generation
+def last_error() -> str | None:
+    return _last_error
+
+
+def _post(path: str, payload: dict, timeout: int) -> dict | None:
+    global _last_error
+    req = urllib.request.Request(
+        HOST + path, data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            _last_error = None
+            return json.loads(r.read())
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", "replace")[:200]
+        _last_error = f"Ollama said {exc.code}: {body}"
+    except Exception as exc:
+        _last_error = f"{type(exc).__name__}: {exc}"
+    return None
 
 
 def ask(prompt: str, system: str = "", *, json_mode: bool = False,
-        max_tokens: int = 800, timeout: int = TIMEOUT) -> str | None:
-    """One-shot completion. Returns None whenever the LLM isn't usable."""
-    if not enabled():
-        return None
+        max_tokens: int = 900, timeout: int = TIMEOUT,
+        temperature: float = 0.2) -> str | None:
+    """One-shot completion. None means it failed; last_error() says why."""
+    model = config.get("llm_model") or recommended_model()
     payload = {
-        "model": config.get("llm_model"),
+        "model": model,
         "prompt": prompt,
         "stream": False,
-        "options": {"num_predict": max_tokens, "temperature": 0.2},
+        "keep_alive": KEEP_ALIVE,
+        "options": {"num_predict": max_tokens, "temperature": temperature},
     }
     if system:
         payload["system"] = system
@@ -90,27 +200,39 @@ def ask(prompt: str, system: str = "", *, json_mode: bool = False,
     if not out:
         return None
     text = (out.get("response") or "").strip()
-    return text or None
+    return strip_thinking(text) or None
 
 
 def ask_json(prompt: str, system: str = "", timeout: int = TIMEOUT) -> dict | None:
-    raw = ask(prompt, system, json_mode=True, timeout=timeout)
+    raw = ask(prompt, system, json_mode=True, timeout=timeout, temperature=0.1)
     if not raw:
         return None
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        return None
+        start, end = raw.find("{"), raw.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                return json.loads(raw[start:end + 1])
+            except json.JSONDecodeError:
+                pass
+    return None
 
 
+def strip_thinking(text: str) -> str:
+    """Reasoning models emit <think> blocks. Nobody wants those in an answer."""
+    import re
+    return re.sub(r"<think>.*?</think>\s*", "", text, flags=re.S | re.I).strip()
+
+
+# ----------------------------------------------------------------- setup
 def pull(model: str | None = None, on_progress=None) -> bool:
-    """Download a model, reporting percent complete. Blocking; call off-thread."""
-    model = model or config.get("llm_model")
+    """Download a model, reporting percent complete. Blocking."""
+    model = model or config.get("llm_model") or recommended_model()
     req = urllib.request.Request(
         HOST + "/api/pull",
         data=json.dumps({"model": model, "stream": True}).encode(),
-        headers={"Content-Type": "application/json"},
-    )
+        headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=None) as r:
             for line in r:
@@ -120,13 +242,46 @@ def pull(model: str | None = None, on_progress=None) -> bool:
                     msg = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if on_progress and msg.get("total"):
-                    on_progress(int(100 * msg.get("completed", 0) / msg["total"]),
-                                msg.get("status", ""))
+                if on_progress:
+                    if msg.get("total"):
+                        percent = int(100 * msg.get("completed", 0) / msg["total"])
+                        on_progress(percent, msg.get("status", ""))
+                    else:
+                        on_progress(None, msg.get("status", ""))
                 if msg.get("status") == "success":
                     _state.pop("models", None)
-                    _state.pop("running", None)
                     return True
-    except Exception:
+    except Exception as exc:
+        global _last_error
+        _last_error = f"{type(exc).__name__}: {exc}"
         return False
     return False
+
+
+def warm_up(on_progress=None) -> bool:
+    """Load the model into VRAM so the first real question is not the slow one.
+
+    A cold 8B model takes several seconds to load. Doing it during the splash
+    means the first thing the user asks feels instant.
+    """
+    if on_progress:
+        on_progress("Warming the model up…")
+    reply = ask("Reply with the single word: ready", max_tokens=8, timeout=180)
+    return bool(reply)
+
+
+def install_ollama(on_progress=None) -> bool:
+    """Install Ollama itself, via winget. Windows only."""
+    if sys.platform != "win32":
+        return False
+    if on_progress:
+        on_progress("Installing Ollama…")
+    try:
+        done = subprocess.run(
+            ["winget", "install", "--id", "Ollama.Ollama", "--silent",
+             "--accept-package-agreements", "--accept-source-agreements"],
+            capture_output=True, text=True, timeout=900,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return done.returncode == 0 and ollama_installed()

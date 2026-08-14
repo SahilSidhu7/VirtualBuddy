@@ -166,7 +166,25 @@
         <p>Manual mode shows the match and its confidence first; auto mode just runs it. Either way you see each step as it happens, and a clock, so nothing ever looks stuck. Anything irreversible asks first.</p>
       </div>
     </div>
-    <p class="dim reveal" style="margin-top:2rem">A local language model is optional. If <a href="https://ollama.com" class="accent">Ollama</a> is running with <code class="mono">qwen3:4b</code>, research and page summaries get written up properly. That model fits in about 2.6GB of VRAM, so a 4GB card is enough. Without it every skill still works, you just get the extracted text and the sources instead of a synthesis.</p>
+    <p class="dim reveal" style="margin-top:2rem">The model runs on your machine, through <a href="https://ollama.com" class="accent">Ollama</a>, and the buddy sets it up the first time you start it: it installs what is missing, downloads a model sized to your graphics card, and loads it in, behind a progress bar. A 4GB card gets a 4B model, an 8GB card gets an 8B one, and a machine with no graphics card still works on the processor.</p>
+
+    <div class="steps reveal" style="margin-top:1.6rem">
+      <div class="step">
+        <span class="k">one question</span>
+        <b>It answers</b>
+        <p>Not a wall of scraped page. Four sources, read and turned into six bullets with the site named next to each claim.</p>
+      </div>
+      <div class="step">
+        <span class="k">two verbs</span>
+        <b>It plans</b>
+        <p>"Find the best monitors and open the top result" becomes two steps you can see before either of them runs.</p>
+      </div>
+      <div class="step">
+        <span class="k">no pretending</span>
+        <b>It admits</b>
+        <p>Ask it to apply for jobs and it says plainly: it can find and open the pages, but signing in and filling the form is yours.</p>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -179,7 +197,7 @@
           <a class="btn primary big" href="https://github.com/SahilSidhu7/VirtualBuddy/releases/latest/download/VirtualBuddy-Setup.exe">Download for Windows</a>
           <a class="btn" href="https://github.com/SahilSidhu7/VirtualBuddy/releases/latest/download/VirtualBuddy-portable.zip">Portable zip</a>
         </div>
-        <p class="faint" style="margin-top:.9rem; font-size:.88rem">29MB installer. No admin rights needed, and the setup asks whether you want it to start when you sign in.</p>
+        <p class="faint" style="margin-top:.9rem; font-size:.88rem">29MB installer. No admin rights needed, and the setup asks whether you want it to start when you sign in. On first run it sets up the model, which is a few gigabytes and happens once.</p>
         <p class="dim" style="margin-top:1.4rem">Your buddy appears in the bottom right of the screen. Click it to open the panel, drag it wherever you like, right click it for settings.</p>
 
         <p class="dim" style="margin-top:2.2rem; font-weight:600; color:var(--text)">Or run it from source, on any OS</p>
