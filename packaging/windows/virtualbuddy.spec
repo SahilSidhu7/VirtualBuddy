@@ -26,8 +26,10 @@ a = Analysis(
     # calendar, no browser control and no eyes.
     hiddenimports=[
         "vb.skills.agenda", "vb.skills.apps", "vb.skills.browsing",
+        "vb.skills.claudework", "vb.claudecode",
         "vb.skills.filework", "vb.skills.pcgraph", "vb.skills.procs",
         "vb.skills.seeing", "vb.skills.todo", "vb.skills.websearch",
+        "vb.skills.work", "vb.projects", "vb.embed",
         "vb.planner", "vb.progress", "vb.ui.splash",
         # Reached only through function-level imports, and cheap insurance
         # against the analyser missing one: an absent module here is another

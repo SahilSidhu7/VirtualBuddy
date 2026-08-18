@@ -582,6 +582,20 @@ def _record(outcome: Outcome) -> None:
         note += "no answer was reached"
     if wasted:
         note += f"; {', '.join(wasted[:3])} got nowhere"
+
+    # And what the run actually established. The line above is about machinery
+    # — which tool fired, how many steps — and machinery is close to useless to
+    # recall later: asked "what am I working on", memory offered
+    # `run_shell produced the answer after 9 steps` and nothing about the
+    # answer. Worse, that sentence was not even true of the run it described,
+    # because a rescued answer counts as one nobody wrote.
+    #
+    # So the finding is carried too, and only when the model wrote it. A
+    # harness-written answer is not a finding, it is an apology, and storing it
+    # as something remembered repeats the mistake that poisoned the first
+    # training set.
+    if worked and outcome.answer and not getattr(outcome, "rescued", False):
+        note += f". It found: {' '.join(outcome.answer.split())[:400]}"
     memory.remember(note + ".", kind="episode", tags=" ".join(useful[-1:] + wasted[:2]))
 
 

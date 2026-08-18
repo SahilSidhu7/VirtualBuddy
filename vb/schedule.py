@@ -107,14 +107,65 @@ def schedule(name: str, request: str, *, daily: str = "", hourly: int = 0,
     safe_request = request.replace('"', "'")
     argv = ["schtasks", "/Create", "/F", "/TN", _task_name(name),
             "/TR", f'{command} "{safe_request}"', *timing]
+    ok, message = _run_schtasks(argv)
+    if ok:
+        return True, f"Scheduled “{name}”. It is in Task Scheduler under {FOLDER}."
+
+    # `/SD` is parsed in the machine's own short-date format, not ISO. On this
+    # locale it wants dd/mm/yyyy and answers an ISO date with
+    # `ERROR: Invalid Start Date (Date should be in "dd/mm/yyyy" format)`, so
+    # every one-off job failed here while daily and hourly ones — which take no
+    # date at all — worked, which is why it went unnoticed.
+    #
+    # The format is read back out of the refusal rather than guessed from the
+    # locale: schtasks states what it wants, and believing it is more reliable
+    # than deriving the same string from `GetLocaleInfo` and hoping they agree.
+    if once_at and "start date" in message.lower():
+        retry = _redate(argv, once_at, message)
+        if retry:
+            ok, message = _run_schtasks(retry)
+            if ok:
+                return True, (f"Scheduled “{name}”. It is in Task Scheduler "
+                              f"under {FOLDER}.")
+    return False, message
+
+
+def _run_schtasks(argv: list[str]) -> tuple[bool, str]:
     try:
         done = subprocess.run(argv, capture_output=True, text=True, timeout=30,
                               creationflags=NO_WINDOW)
     except (OSError, subprocess.SubprocessError) as exc:
         return False, f"Could not reach the Task Scheduler: {exc}"
     if done.returncode != 0:
-        return False, (done.stderr or done.stdout or "schtasks refused it.").strip()[:200]
-    return True, f"Scheduled “{name}”. It is in Task Scheduler under {FOLDER}."
+        return False, (done.stderr or done.stdout
+                       or "schtasks refused it.").strip()[:200]
+    return True, ""
+
+
+# The format schtasks names in its own error, e.g. dd/mm/yyyy or MM/dd/yyyy.
+_WANTED_FORMAT = re.compile(r'"([dDmMyY/\-.]{8,10})"')
+
+
+def _redate(argv: list[str], once_at: str, complaint: str) -> list[str] | None:
+    """The same command with the date written the way schtasks asked for."""
+    found = _WANTED_FORMAT.search(complaint)
+    if not found:
+        return None
+    pattern = found.group(1)
+    try:
+        when = time.strptime(once_at, "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+    # Only the field order varies; the separator comes along with the pattern.
+    formatted = (pattern.replace("dd", f"{when.tm_mday:02d}")
+                        .replace("MM", f"{when.tm_mon:02d}")
+                        .replace("mm", f"{when.tm_mon:02d}")
+                        .replace("yyyy", str(when.tm_year)))
+    if not formatted or any(c.isalpha() for c in formatted):
+        return None
+    out = list(argv)
+    out[out.index("/SD") + 1] = formatted
+    return out
 
 
 def unschedule(name: str) -> tuple[bool, str]:

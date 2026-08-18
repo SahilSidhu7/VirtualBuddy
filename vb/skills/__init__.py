@@ -9,10 +9,12 @@ MODULES = (
     "agenda",
     "apps",
     "browsing",
+    "claudework",
     "filework",
     "pcgraph",
     "procs",
     "seeing",
     "todo",
     "websearch",
+    "work",
 )
