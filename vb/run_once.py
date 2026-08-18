@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 
-from vb import loop, progress, schedule
+from vb import loop, progress, schedule, traces
 from vb.registry import load_all
 
 
@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
         print("usage: python -m vb.run_once \"what to do\"")
         return 2
 
+    traces.set_source("scheduled")
     load_all()
     ready, why = loop.available()
     if not ready:

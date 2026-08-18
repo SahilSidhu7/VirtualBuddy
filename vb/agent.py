@@ -17,12 +17,12 @@ path keeps as much traffic off it as possible.
 """
 from __future__ import annotations
 
+import re
+import time
 from dataclasses import dataclass, field
 from typing import Callable
 
-import re
-
-from vb import config, loop, planner, progress
+from vb import config, loop, planner, progress, testlog
 from vb.planner import Plan
 from vb.registry import Result
 from vb.router import AUTO_THRESHOLD, Match, Router
@@ -46,6 +46,19 @@ MULTI_STEP = re.compile(
 
 def _looks_multi_step(prompt: str) -> bool:
     return bool(MULTI_STEP.search(prompt))
+
+
+def _log(job) -> None:
+    """Run a logging call, and never let it take the answer down with it.
+
+    Same reasoning as `loop._after`: this is bookkeeping, it is worth less than
+    the answer, and an exception on the way out of `run` would reach the panel
+    as a failed request that had in fact succeeded.
+    """
+    try:
+        job()
+    except Exception:
+        pass
 
 
 @dataclass
@@ -128,16 +141,28 @@ class Agent:
         return turn
 
     # -- execution -------------------------------------------------------
-    def run(self, match: Match, on_progress=None) -> Result:
+    def run(self, match: Match, on_progress=None, question: str = "") -> Result:
+        started = time.time()
         try:
             with progress.listening(on_progress):
                 out = match.skill.run(**match.slots)
         except TypeError as exc:           # slot names out of step with the function
-            return Result.fail(f"{match.skill.name} couldn't accept those arguments.",
-                               str(exc))
+            out = Result.fail(f"{match.skill.name} couldn't accept those arguments.",
+                              str(exc))
         except Exception as exc:
-            return Result.fail(f"{match.skill.name} failed.", f"{type(exc).__name__}: {exc}")
-        return out if isinstance(out, Result) else Result(text=str(out))
+            out = Result.fail(f"{match.skill.name} failed.",
+                              f"{type(exc).__name__}: {exc}")
+        if not isinstance(out, Result):
+            out = Result(text=str(out))
+        # The fast path answers most requests, and until now it recorded
+        # nothing at all — so a testing session showed only the questions that
+        # happened to need the model. Deliberately kept out of `traces`: the
+        # router chose this skill by cosine similarity, and a training set that
+        # calls that a model decision teaches the model to guess tools.
+        _log(lambda: testlog.record_skill(question or match.slots.get("_prompt", ""),
+                                          match.skill.name, match.slots, out,
+                                          time.time() - started))
+        return out
 
     def run_plan(self, turn: Turn, on_progress=None) -> Result:
         """Run a plan's steps in order, reporting which one is going.
@@ -153,7 +178,8 @@ class Agent:
             if on_progress:
                 on_progress(f"Step {i} of {len(plan.steps)}: {step.describe()}")
             match = Match(skill=step.skill, score=1.0, slots=step.args)
-            res = self.run(match, on_progress=on_progress)
+            res = self.run(match, on_progress=on_progress,
+                           question=turn.prompt)
             data.append(res)
             head = (res.text or "").strip()
             lines.append(f"{i}. {step.describe()}\n{head}")
@@ -191,5 +217,6 @@ class Agent:
             return Result.fail("Nothing to run.")
         match = turn.matches[min(choice, len(turn.matches) - 1)]
         turn.pending = None
-        turn.result = self.run(match, on_progress=on_progress)
+        turn.result = self.run(match, on_progress=on_progress,
+                               question=turn.prompt)
         return turn.result

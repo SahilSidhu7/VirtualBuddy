@@ -147,6 +147,25 @@ class Panel(tk.Toplevel):
         self._tags()
         self.show_empty()
 
+        # Was that right? Hidden until there is an answer to judge.
+        #
+        # This is the highest-value thing the panel collects. The critic grades
+        # every run automatically, but it is not reliable on its own — on the
+        # first verified harvest it passed every answer while an independent
+        # checker found a third of them factually wrong. Two buttons at the
+        # moment the person is already looking at the answer is the only cheap
+        # way to get a label that is actually true.
+        self.judge = tk.Frame(self, bg=t.base)
+        self.judge_lbl = tk.Label(self.judge, text="was that right?", bg=t.base,
+                                  fg=t.text_faint, font=font(t, 9), anchor="w")
+        self.judge_lbl.pack(side="left", padx=(2, 8))
+        self.bad_btn = Button(self.judge, "No", lambda: self._judge("bad"), t,
+                              width=42, height=24, size=9)
+        self.bad_btn.pack(side="right", padx=(4, 2))
+        self.good_btn = Button(self.judge, "Yes", lambda: self._judge("good"), t,
+                               width=44, height=24, size=9)
+        self.good_btn.pack(side="right", padx=2)
+
         self.foot = tk.Label(self, text="", bg=t.base, fg=t.text_faint,
                              font=font(t, 9), anchor="w")
         self.foot.pack(fill="x", padx=PAD, pady=(0, 10))
@@ -253,6 +272,41 @@ class Panel(tk.Toplevel):
             self.out.insert("end", f"\ntook {took:.1f}s\n", "clock")
         self.out.configure(state="disabled")
         self.out.see("1.0")
+        self._show_judge()
+
+    # ------------------------------------------------------------- judging
+    def _show_judge(self):
+        self.judge_lbl.configure(text="was that right?")
+        # Re-packed every time: `_judge` unpacks them after a click, and
+        # without this the next answer would show the strip with no buttons.
+        self.bad_btn.pack(side="right", padx=(4, 2))
+        self.good_btn.pack(side="right", padx=2)
+        self.judge.pack(fill="x", padx=PAD, pady=(0, 2), before=self.foot)
+
+    def _hide_judge(self):
+        self.judge.pack_forget()
+
+    def _judge(self, verdict: str):
+        """Record the person's opinion of the answer on screen.
+
+        Never allowed to raise: this is bookkeeping hanging off a button, and
+        a traceback here would land in the Tk callback and leave the panel in
+        an odd state over something that is not the answer.
+        """
+        from vb import testlog
+        try:
+            marked = testlog.mark_last(verdict)
+        except Exception:
+            marked = None
+        if marked is None:
+            self.judge_lbl.configure(text="nothing recorded to mark")
+            return
+        self.judge_lbl.configure(
+            text="noted, thank you" if verdict == "good"
+            else "noted — it is in the testing log")
+        self.good_btn.pack_forget()
+        self.bad_btn.pack_forget()
+        self.after(2500, self._hide_judge)
 
     def _insert_rich(self, line: str, tag):
         """Write a line, rendering the little markdown that reaches us.

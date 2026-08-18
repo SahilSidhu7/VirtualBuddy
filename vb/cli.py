@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sys
 
-from vb import config
+from vb import config, traces
 from vb.agent import Agent
 from vb.registry import load_all
 
@@ -18,6 +18,8 @@ BANNER = """VirtualBuddy — type what you want, or:
   /learned           the skills it has written for itself
   /mcp               external tool servers
   /traces            what has been recorded for fine-tuning
+  /good  /bad why    was the last answer right? the only label worth trusting
+  /testlog [bad]     write the testing log to a file you can send on
   /auto  /manual     run matches straight away, or confirm first
   /quit
 """
@@ -25,6 +27,11 @@ BANNER = """VirtualBuddy — type what you want, or:
 
 def _report(message: str) -> None:
     print(f"   … {message}")
+
+
+def _ellipsis(text: str, limit: int = 60) -> str:
+    text = (text or "").strip()
+    return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
 def _approve(tool: str, args: dict, reason: str) -> bool:
@@ -146,6 +153,7 @@ def _readable_console() -> None:
 def main(argv: list[str] | None = None) -> int:
     _readable_console()
     argv = argv if argv is not None else sys.argv[1:]
+    traces.set_source("cli")
     skills = load_all()
     agent = Agent()
 
@@ -178,9 +186,29 @@ def main(argv: list[str] | None = None) -> int:
             print(mcp.status())
             continue
         if line == "/traces":
-            from vb import traces
             print(traces.stats().describe())
             print(f"  recorded in: {traces.path()}")
+            continue
+        if line in ("/good", "/bad", "/wrong") or line.startswith(
+                ("/good ", "/bad ", "/wrong ")):
+            word, _, why = line.partition(" ")
+            verdict = "good" if word == "/good" else "bad"
+            from vb import testlog
+            marked = testlog.mark_last(verdict, why)
+            if marked is None:
+                print("  nothing to mark yet — ask something first.")
+            else:
+                print(f"  marked {verdict}: {_ellipsis(marked.get('question', ''))}")
+                if verdict == "bad" and not why.strip():
+                    print("  (a word on what was wrong makes it far more "
+                          "useful: /bad it counted subfolders too)")
+            continue
+        if line == "/testlog" or line.startswith("/testlog "):
+            from vb import testlog
+            rest = line.partition(" ")[2].strip().lower()
+            target = testlog.write(only_failures=rest in ("bad", "failures"))
+            print(f"  {testlog.summary()}")
+            print(f"  written to: {target}")
             continue
         if line == "/model":
             _choose_model()

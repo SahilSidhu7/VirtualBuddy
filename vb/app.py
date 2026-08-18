@@ -8,7 +8,7 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 
-from vb import config, llm, startup
+from vb import config, llm, startup, traces
 from vb.agent import Agent
 from vb.registry import load_all
 from vb.ui import theme as themes
@@ -27,6 +27,7 @@ class App:
         self.root.withdraw()
         self.root.title("VirtualBuddy")
 
+        traces.set_source("panel")
         load_all()
         self.agent = Agent()
 

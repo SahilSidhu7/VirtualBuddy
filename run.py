@@ -4,6 +4,8 @@
     python run.py --cli        the terminal instead
     python run.py --once "..." do one thing, no window, result to the inbox
     python run.py --chat       answer from Telegram or Discord
+    python run.py --testlog    write what you asked and what it said to a file
+                               (add "bad" for the failures only)
     python run.py --selftest   load everything, print a report, exit
 
 --selftest is what CI runs against the packaged .exe: it exercises the parts a
@@ -87,6 +89,16 @@ if __name__ == "__main__":
         argv = sys.argv[1:]
         argv.remove("--once")
         raise SystemExit(main(argv))
+    # Export the testing log without having to open a front end. A packaged
+    # build has no console, so this is how someone on an installed copy gets
+    # the file: run the .exe with --testlog and read where it says it went.
+    if "--testlog" in sys.argv:
+        from vb import testlog
+        only_bad = "bad" in sys.argv or "failures" in sys.argv
+        target = testlog.write(only_failures=only_bad)
+        print(testlog.summary())
+        print(f"written to: {target}")
+        raise SystemExit(0)
     if "--cli" in sys.argv:
         from vb.cli import main
         sys.argv.remove("--cli")

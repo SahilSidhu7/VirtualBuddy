@@ -28,7 +28,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
-from vb import config, loop, progress
+from vb import config, loop, progress, traces
 
 POLL_TIMEOUT = 50           # seconds the server holds an empty long poll
 MAX_REPLY = 3500            # both platforms cut messages around 4000
@@ -243,6 +243,7 @@ def serve_forever() -> int:
         return 1
     from vb.registry import load_all
 
+    traces.set_source("chat")
     load_all()
     ready, why = loop.available()
     if not ready:

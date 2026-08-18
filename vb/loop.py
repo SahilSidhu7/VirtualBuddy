@@ -457,8 +457,11 @@ def _after(outcome: Outcome, system: str, offered: list[str]) -> None:
     synthetic prompt containing the first attempt's transcript, and storing
     that as "something I remember" poisons every later recall.
     """
+    from vb import testlog
+
     for job in (lambda: _record(outcome),
                 lambda: traces.record(outcome, system=system, offered=offered),
+                lambda: testlog.record_outcome(outcome),
                 lambda: _maybe_learn(outcome),
                 memory.maybe_consolidate):
         try:
