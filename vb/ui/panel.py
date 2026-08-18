@@ -308,6 +308,52 @@ class Panel(tk.Toplevel):
         self.out.configure(state="disabled")
         self.on_state("idle")
 
+    def _show_task(self, prompt: str):
+        """A request for the agent loop. There are no steps to show yet — the
+        loop decides them as it goes — so this offers the work, not a plan."""
+        self.prop_name.configure(text="work on it")
+        self.prop_args.configure(text=_ellipsis(prompt, 28))
+        self.meter.set(1.0)
+        self.alt_btn.set_text("No thanks")
+        self.run_btn.set_text("Go")
+        self.proposal.pack(fill="x", padx=PAD, pady=(10, 0), before=self.out.master)
+
+        self.out.configure(state="normal")
+        self.out.delete("1.0", "end")
+        self.out.insert("end", f"“{prompt}”\n", "head")
+        self.out.insert("end",
+                        "No single skill covers this, so I'll work through it in "
+                        "steps — looking at what each one returns before choosing "
+                        "the next. I'll ask before anything that cannot be undone.\n",
+                        "dim")
+        self.out.configure(state="disabled")
+        self.on_state("idle")
+
+    def _ask_approval(self, tool: str, args: dict, reason: str) -> bool:
+        """Approval prompt, called from the loop's worker thread.
+
+        Tk may only be touched from the thread that owns it, so the dialog is
+        scheduled onto the main loop and this thread waits for the answer.
+        """
+        from tkinter import messagebox
+        shown = "\n".join(f"{k}: {str(v)[:300]}" for k, v in args.items())
+        box: dict = {}
+        answered = threading.Event()
+
+        def ask():
+            try:
+                box["yes"] = messagebox.askyesno(
+                    "VirtualBuddy needs a yes",
+                    f"It wants to run {tool}, which {reason}.\n\n{shown}\n\n"
+                    f"Allow it?", parent=self)
+            finally:
+                answered.set()
+
+        self.after(0, ask)
+        if not answered.wait(timeout=180):
+            return False           # no answer in three minutes is a no
+        return bool(box.get("yes"))
+
     # -- actions ---------------------------------------------------------
     def _on_return(self, _event):
         if not self.entry.get().strip() and self.turn and self.turn.matches \
@@ -339,7 +385,12 @@ class Panel(tk.Toplevel):
             self._busy = False
             self._stop_clock()
             self.turn = turn
-            if turn.plan:
+            if turn.task:
+                if turn.auto:
+                    self.run_task()
+                else:
+                    self._show_task(prompt)
+            elif turn.plan:
                 self._show_plan(turn.plan, prompt)
             elif turn.auto:
                 self.run_pending()
@@ -372,6 +423,8 @@ class Panel(tk.Toplevel):
     def run_pending(self, choice: int = 0):
         if not self.turn or self._busy:
             return
+        if self.turn.task:
+            return self.run_task()
         if self.turn.plan:
             return self.run_plan()
         self._hide_proposal()
@@ -393,6 +446,51 @@ class Panel(tk.Toplevel):
         def done(res):
             self._busy = False
             self._stop_clock()
+            self.show_result(res, took=time.monotonic() - started)
+            self.on_state("talk")
+            self.after(1800, lambda: self.on_state("idle"))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def run_task(self):
+        """Hand the request to the agent loop and watch it work."""
+        turn = self.turn
+        if not turn or not turn.task or self._busy:
+            return
+        self._hide_proposal()
+        self.run_btn.set_text("Run")
+        self.show_working("working on it")
+        self.on_state("working")
+        self._busy = True
+        started = time.monotonic()
+
+        def work():
+            # try/finally, not try/except: whatever happens, `done` has to run.
+            # It is the only thing that clears `_busy`, and a worker that dies
+            # without it leaves the panel refusing every further request with
+            # no sign of why.
+            try:
+                res = self.agent.run_task(
+                    turn, approve=self._ask_approval,
+                    on_progress=lambda m: self.after(0, self.step, m))
+            except Exception as exc:
+                res = _note("That went wrong while I was working on it.",
+                            f"{type(exc).__name__}: {exc}")
+                res.ok = False
+            finally:
+                self.after(0, done, res)
+
+        def done(res):
+            self._busy = False
+            self._stop_clock()
+            out = turn.outcome
+            if out and out.steps:
+                extra = f"{len(out.steps)} steps"
+                if out.escalated:
+                    extra += ", asked a stronger model"
+                if out.verdict and not out.verdict.passed:
+                    extra += f" — {out.verdict.summary}"
+                res.detail = (res.detail + "  " if res.detail else "") + f"({extra})"
             self.show_result(res, took=time.monotonic() - started)
             self.on_state("talk")
             self.after(1800, lambda: self.on_state("idle"))
@@ -427,6 +525,13 @@ class Panel(tk.Toplevel):
 
     def next_match(self):
         """Cycle the proposal through the alternatives the router offered."""
+        if self.turn and self.turn.task:      # "No thanks" on a piece of work
+            self.turn.task = False
+            self._hide_proposal()
+            self.run_btn.set_text("Run")
+            self.show_result(_note("Left that one.",
+                                   "Ask again, or say it as one thing at a time."))
+            return
         if self.turn and self.turn.plan:      # "No thanks" on a plan
             self.turn.plan = None
             self._hide_proposal()

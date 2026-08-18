@@ -1,15 +1,28 @@
-"""The bit in the middle: prompt in, skill run, answer out.
+"""The bit in the middle: prompt in, work done, answer out.
 
-Manual mode proposes the top match and waits for a yes. Auto mode runs it when
-the router is confident enough. Dangerous skills always ask, in either mode.
+There are two ways through here and the split matters, because one of them is
+free and the other is not.
+
+The fast path is the router: a cosine match against skill phrases, sub-
+millisecond, no model involved. "what's using my cpu" is one skill and there is
+nothing to think about, so nothing thinks about it. Manual mode proposes the
+match and waits for a yes; auto mode runs it when the score is high enough;
+dangerous skills always ask.
+
+The slow path is the agent loop, and it is where anything real happens. A
+request that no single skill covers, or that asks for two things, or that needs
+one step's output to feed the next, goes to `vb.loop` — which calls the model
+once per step and can write and run code. It costs model calls, so the fast
+path keeps as much traffic off it as possible.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Callable
 
 import re
 
-from vb import config, planner, progress
+from vb import config, loop, planner, progress
 from vb.planner import Plan
 from vb.registry import Result
 from vb.router import AUTO_THRESHOLD, Match, Router
@@ -44,6 +57,8 @@ class Turn:
     pending: Match | None = None
     auto: bool = False        # confident enough to run without being asked
     plan: "Plan | None" = None   # a multi-step answer, when one skill will not do
+    task: bool = False        # this one needs the agent loop, not a single skill
+    outcome: "loop.Outcome | None" = None
 
     @property
     def needs_confirm(self) -> bool:
@@ -74,6 +89,17 @@ class Agent:
         # "open browser and start applying to jobs" matched open_app at 0.61
         # and would have opened a browser and stopped there.
         if _looks_multi_step(prompt) or best_score < PLAN_THRESHOLD:
+            ready, why = loop.available()
+            if ready:
+                # Hand it to the loop. Routing stays cheap: nothing is asked of
+                # the model here, because deciding to think is not thinking.
+                turn.task = True
+                turn.auto = config.get("mode") == "auto"
+                self.last = turn
+                return turn
+
+            # No model at all. The planner cannot help either, but it produces
+            # the message explaining what is missing.
             with progress.listening(on_progress):
                 if on_progress:
                     on_progress("Working out how to do that…")
@@ -85,7 +111,7 @@ class Agent:
             if not turn.matches:
                 turn.result = Result.fail(
                     "I don't have a skill for that yet.",
-                    plan.cannot or plan.note
+                    plan.cannot or plan.note or why
                     or "Try: research …, where did i put …, what's using my cpu")
                 self.last = turn
                 return turn
@@ -137,6 +163,24 @@ class Agent:
         detail = " ".join(x for x in (plan.cannot, plan.note) if x)
         turn.result = Result(ok=True, text="\n\n".join(lines), detail=detail,
                              data=data)
+        return turn.result
+
+    def run_task(self, turn: Turn, approve: Callable[[str, dict, str], bool] | None = None,
+                 on_progress=None) -> Result:
+        """Work the request with the agent loop.
+
+        `approve` is asked before anything irreversible: it gets the tool name,
+        its arguments and a plain sentence about why it is being asked. Passing
+        None means every such call is declined, which is the right default for
+        anything running unattended.
+        """
+        with progress.listening(on_progress):
+            outcome = loop.run(turn.prompt, approve=approve,
+                               max_steps=int(config.get("agent_max_steps")
+                                             or loop.MAX_STEPS))
+        turn.outcome = outcome
+        turn.result = outcome.as_result()
+        self.last = turn
         return turn.result
 
     def confirm(self, turn: Turn | None = None, choice: int = 0,

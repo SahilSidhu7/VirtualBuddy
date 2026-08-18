@@ -13,6 +13,11 @@ from vb.registry import load_all
 
 BANNER = """VirtualBuddy — type what you want, or:
   /skills            list what I can do
+  /tools             everything the agent loop can call
+  /model             see what this machine can run, and pick one
+  /learned           the skills it has written for itself
+  /mcp               external tool servers
+  /traces            what has been recorded for fine-tuning
   /auto  /manual     run matches straight away, or confirm first
   /quit
 """
@@ -22,7 +27,71 @@ def _report(message: str) -> None:
     print(f"   … {message}")
 
 
+def _approve(tool: str, args: dict, reason: str) -> bool:
+    """Ask before something irreversible. Defaults to no on anything unclear."""
+    shown = ", ".join(f"{k}={str(v)[:120]}" for k, v in args.items())
+    print(f"\n   ⚠ {tool} {reason}.")
+    print(f"     {shown}")
+    try:
+        return input("     allow it? [y/N] ").strip().lower() in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        return False
+
+
+def _show_task(turn, agent) -> None:
+    """The agent loop path: many steps, model in the middle of each one."""
+    if not turn.auto:
+        print("→ I'll work through this in steps.")
+        if input("   go ahead? [Y/n] ").strip().lower() not in ("", "y", "yes"):
+            print("   skipped.")
+            return
+    res = agent.run_task(turn, approve=_approve, on_progress=_report)
+    out = turn.outcome
+    if out and out.steps:
+        print(f"\n   ({len(out.steps)} steps, {out.seconds:.0f}s"
+              + (", asked a stronger model" if out.escalated else "") + ")")
+    if out and out.verdict and not out.verdict.passed:
+        print(f"   critic: {out.verdict.badge()} {out.verdict.summary}")
+    if out and out.learned:
+        print(f"   learned: {out.learned}")
+    print(("" if res.ok else "! ") + res.text)
+    if res.detail:
+        print("  " + res.detail)
+
+
+FIT_WORD = {"good": "✓", "tight": "~", "slow": "!", "no": "✕"}
+
+
+def _choose_model() -> None:
+    """Show what this machine can run, and let the user pick one."""
+    from vb import llm
+    kit = llm.hardware()
+    print(f"  {kit['summary']}\n")
+    options = llm.model_options()
+    for i, opt in enumerate(options, start=1):
+        marks = " ".join(x for x in (
+            "recommended" if opt["recommended"] else "",
+            "downloaded" if opt["installed"] else "") if x)
+        print(f"  {i}. {FIT_WORD[opt['fit']]} {opt['name']:14} "
+              f"{opt['size_gb']:.1f}GB  {opt['speed']}"
+              + (f"  [{marks}]" if marks else ""))
+        print(f"       {opt['blurb']}")
+    answer = input("\n  which one? [number, or enter to keep the recommendation] ")
+    answer = answer.strip()
+    if answer.isdigit() and 1 <= int(answer) <= len(options):
+        chosen = options[int(answer) - 1]["name"]
+    else:
+        chosen = llm.recommended_model()
+    config.set("llm_model", chosen)
+    config.set("llm_model_pinned", True)
+    print(f"  using {chosen}."
+          + ("" if llm.installed(chosen) else
+             "  Run `ollama pull " + chosen + "` to download it."))
+
+
 def _show(turn, agent) -> None:
+    if turn.task:
+        return _show_task(turn, agent)
     if turn.plan:
         print(f"→ {len(turn.plan.steps)} steps:")
         for i, step in enumerate(turn.plan.steps, start=1):
@@ -99,6 +168,29 @@ def main(argv: list[str] | None = None) -> int:
         if line == "/skills":
             for name, sk in sorted(skills.items()):
                 print(f"  {name:16} {sk.description}")
+            continue
+        if line == "/learned":
+            from vb import learning
+            print(learning.summary())
+            continue
+        if line == "/mcp":
+            from vb import mcp
+            print(mcp.status())
+            continue
+        if line == "/traces":
+            from vb import traces
+            print(traces.stats().describe())
+            print(f"  recorded in: {traces.path()}")
+            continue
+        if line == "/model":
+            _choose_model()
+            continue
+        if line == "/tools":
+            from vb import backends, tools as toolkit
+            print(toolkit.catalogue())
+            tiers = backends.describe_tiers()
+            print(f"\n  models: fast={tiers['fast']}  work={tiers['work']}  "
+                  f"hard={tiers['hard']}")
             continue
         if line in ("/auto", "/manual"):
             config.set("mode", line[1:])

@@ -176,8 +176,14 @@ def pc_health(**_) -> Result:
     if battery:
         state = "charging" if battery.power_plugged else "on battery"
         left = ""
-        if not battery.power_plugged and battery.secsleft > 0:
-            left = f", {battery.secsleft // 3600}h {(battery.secsleft % 3600) // 60}m left"
+        # Windows reports "I do not know" as an unsigned 0xFFFFFFFF, which
+        # psutil hands back as-is and `> 0` happily accepts: the panel was
+        # reporting "1193046h 28m left" on a battery at 58%. Anything past a
+        # couple of days is that sentinel, not a laptop.
+        seconds = getattr(battery, "secsleft", 0)
+        known = isinstance(seconds, int) and 0 < seconds < 48 * 3600
+        if not battery.power_plugged and known:
+            left = f", {seconds // 3600}h {(seconds % 3600) // 60}m left"
         lines.append(f"Power  {battery.percent:.0f}% ({state}{left})")
 
     up = time.time() - psutil.boot_time()

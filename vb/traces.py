@@ -1,0 +1,197 @@
+"""Recording what the loop did, so a model can be taught to do it better.
+
+Every finished run is written to `traces.jsonl` as a full conversation: the
+system prompt, the request, each tool call the model made and each observation
+that came back. That is exactly the shape a fine-tune wants, which is the
+point — the training set for a model that is good at *this* machine is the
+record of this machine being used.
+
+The traces are labelled, not just collected. A run the critic passed is
+`good`; a run it failed is `bad`. Both are worth keeping: the good ones are
+what to imitate, and the bad ones say which mistakes are worth training out.
+The fine-tuning tooling lives outside this repo (`vb-others/training/`) and
+reads this file; nothing here ships with a way to retrain the model.
+
+Nothing leaves the machine. The file sits in the user's data folder next to the
+audit log, it can be read in any text editor, and `traces.clear()` deletes it.
+"""
+from __future__ import annotations
+
+import json
+import re
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+from vb import config
+
+MAX_OBSERVATION = 2000       # what gets stored per step, not what the model saw
+
+
+def path() -> Path:
+    return config.data_dir() / "traces.jsonl"
+
+
+def enabled() -> bool:
+    return bool(config.get("collect_traces", True))
+
+
+def _menu_block(offered: list[str]) -> str:
+    """The tool menu, written into the conversation itself.
+
+    The loop passes schemas through the API's `tools` parameter, so they never
+    appear in `messages` — and a fine-tune trained on `messages` alone would
+    teach the model to name tools it was never shown, from memory. That is
+    precisely the behaviour `loop._dispatch` rejects, so the training would
+    have been working against the runtime. Writing the menu in as text means
+    the trained model learns "choose from this list", which is the real task.
+    """
+    from vb import tools as toolkit
+
+    lines = []
+    for name in offered:
+        tool = toolkit.get(name)
+        if not tool:
+            continue
+        args = ", ".join(tool.params) or "no arguments"
+        first = (tool.description or "").strip().splitlines()
+        lines.append(f"- {name}({args}): {first[0] if first else name}")
+    if not lines:
+        return ""
+    return "Tools available for this task:\n" + "\n".join(lines)
+
+
+# Prose the harness writes when the model's own answer was unusable. Correct to
+# show a person, wrong to train on: it is not what a good answer looks like, it
+# is an apology wrapped around one.
+RESCUE_PREFIX = re.compile(
+    r"^\s*(here is what came back:\s*|"
+    r"i did not get to a clean finish[^\n]*\n\s*)", re.I)
+
+
+def strip_rescue(answer: str) -> str:
+    """The answer without the harness's apology around it."""
+    return RESCUE_PREFIX.sub("", answer or "").strip()
+
+
+def _teachable_answer(outcome) -> str:
+    """What `finish` should be recorded as having been called with.
+
+    When the harness rescued the answer, the model never wrote it — and 77% of
+    the first harvest was recorded with the rescue text attached, which would
+    have trained a model to open every reply with "Here is what came back".
+    The evidence underneath is the right lesson; the wrapper is not.
+    """
+    answer = (outcome.answer or "").strip()
+    if not answer:
+        return ""
+    if getattr(outcome, "rescued", False):
+        return strip_rescue(answer)
+    return answer
+
+
+def record(outcome, system: str = "", offered: list[str] | None = None) -> bool:
+    """Write one run as a training conversation. Returns whether it was kept."""
+    if not enabled() or not outcome.steps:
+        return False
+
+    menu = _menu_block(offered or [])
+    messages = []
+    if system or menu:
+        messages.append({"role": "system",
+                         "content": "\n\n".join(x for x in (system, menu) if x)})
+    messages.append({"role": "user", "content": outcome.request})
+    for step in outcome.steps:
+        messages.append({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"type": "function",
+                            "function": {"name": step.tool, "arguments": step.args}}],
+        })
+        messages.append({"role": "tool", "name": step.tool,
+                         "content": step.output[:MAX_OBSERVATION]})
+    answer = _teachable_answer(outcome)
+    if answer:
+        messages.append({
+            "role": "assistant", "content": "",
+            "tool_calls": [{"type": "function",
+                            "function": {"name": "finish",
+                                         "arguments": {"answer": answer}}}],
+        })
+
+    passed = outcome.verdict is None or outcome.verdict.passed
+    row = {
+        "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        # Which model produced this run. Without it a trace file that spans a
+        # fine-tune is unusable: once the trained model starts recording into
+        # the same file, base-model and fine-tuned runs interleave with nothing
+        # to tell them apart, and the next dataset silently trains a model on
+        # its own output.
+        "model": config.get("llm_model") or "",
+        "label": "good" if (outcome.ok and outcome.answer and passed) else "bad",
+        "why": "" if passed else (outcome.verdict.summary if outcome.verdict else ""),
+        "steps": len(outcome.steps),
+        "seconds": round(outcome.seconds, 1),
+        "escalated": outcome.escalated,
+        "messages": messages,
+    }
+    try:
+        with path().open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, default=str) + "\n")
+    except OSError:
+        return False
+    return True
+
+
+@dataclass
+class Stats:
+    total: int = 0
+    good: int = 0
+    bad: int = 0
+    steps: int = 0
+
+    def describe(self) -> str:
+        if not self.total:
+            return "No traces collected yet. Use the buddy and they accumulate."
+        average = self.steps / self.total
+        if self.good >= 200:
+            verdict = "enough to fine-tune on"
+        else:
+            verdict = (f"{200 - self.good} more good runs would make a "
+                       f"worthwhile fine-tune")
+        return (f"{self.total} runs recorded — {self.good} good, {self.bad} bad, "
+                f"{average:.1f} steps each.\n  {path()}\n  {verdict}")
+
+
+def stats() -> Stats:
+    out = Stats()
+    for row in read():
+        out.total += 1
+        out.steps += int(row.get("steps") or 0)
+        if row.get("label") == "good":
+            out.good += 1
+        else:
+            out.bad += 1
+    return out
+
+
+def read() -> list[dict]:
+    try:
+        lines = path().read_text("utf-8").splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in lines:
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def clear() -> bool:
+    try:
+        path().unlink()
+        return True
+    except OSError:
+        return False

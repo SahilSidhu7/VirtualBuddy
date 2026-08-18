@@ -2,6 +2,8 @@
 
     python run.py              the desktop buddy
     python run.py --cli        the terminal instead
+    python run.py --once "..." do one thing, no window, result to the inbox
+    python run.py --chat       answer from Telegram or Discord
     python run.py --selftest   load everything, print a report, exit
 
 --selftest is what CI runs against the packaged .exe: it exercises the parts a
@@ -74,6 +76,17 @@ def selftest() -> int:
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         raise SystemExit(selftest())
+    # What a scheduled task runs in a frozen build. Without this branch the
+    # packaged .exe answered `--once` by opening the whole GUI and ignoring the
+    # request, so every scheduled job on an installed copy did nothing at all.
+    if "--chat" in sys.argv:
+        from vb.chat import serve_forever
+        raise SystemExit(serve_forever())
+    if "--once" in sys.argv:
+        from vb.run_once import main
+        argv = sys.argv[1:]
+        argv.remove("--once")
+        raise SystemExit(main(argv))
     if "--cli" in sys.argv:
         from vb.cli import main
         sys.argv.remove("--cli")

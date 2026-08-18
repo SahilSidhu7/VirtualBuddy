@@ -18,6 +18,9 @@ from vb.ui.sprite import asset_root
 from vb.ui.widgets import Button, font, round_rect
 
 W, H = 430, 280
+CHOOSER_H = 430          # taller: the model list needs the room
+
+FIT_WORD = {"good": "✓", "tight": "~", "slow": "!", "no": "✕"}
 
 
 class Splash(tk.Toplevel):
@@ -35,14 +38,100 @@ class Splash(tk.Toplevel):
         self.configure(bg=self.theme.base, highlightthickness=1,
                        highlightbackground=self.theme.line)
         self._centre()
-        self._build()
-        threading.Thread(target=self._work, daemon=True).start()
 
-    def _centre(self):
+        # First run gets a choice. After that the answer is already stored and
+        # asking again every launch would be a nuisance rather than a courtesy.
+        if config.get("llm_model_pinned") or config.get("llm_model"):
+            self._build()
+            threading.Thread(target=self._work, daemon=True).start()
+        else:
+            self._build_chooser()
+
+    def _centre(self, height: int = H):
         self.update_idletasks()
         x = (self.winfo_screenwidth() - W) // 2
-        y = (self.winfo_screenheight() - H) // 2
-        self.geometry(f"{W}x{H}+{x}+{y}")
+        y = (self.winfo_screenheight() - height) // 2
+        self.geometry(f"{W}x{height}+{x}+{y}")
+
+    # -- choosing a model -------------------------------------------------
+    def _build_chooser(self):
+        """Measure the machine, then let the user pick.
+
+        The ladder's pick is pre-selected and marked, so doing nothing but
+        pressing the button is the same as letting it decide. Everything else
+        is offered with a plain word about what it will cost: a 14B on an 8GB
+        card is allowed, it is just labelled as slow rather than hidden.
+        """
+        t = self.theme
+        self._centre(CHOOSER_H)
+        wrap = tk.Frame(self, bg=t.base)
+        wrap.pack(fill="both", expand=True, padx=26, pady=22)
+
+        tk.Label(wrap, text="Which model should I use?", bg=t.base, fg=t.text,
+                 font=font(t, 14, "bold")).pack(anchor="w")
+
+        kit = llm.hardware()
+        tk.Label(wrap, text=kit["summary"], bg=t.base, fg=t.text_dim,
+                 font=(t.mono, 8), wraplength=W - 60, justify="left"
+                 ).pack(anchor="w", pady=(2, 12))
+
+        self._picked = tk.StringVar(value=llm.recommended_model())
+        for opt in llm.model_options():
+            self._option_row(wrap, opt)
+
+        note = tk.Label(wrap, text="", bg=t.base, fg=t.text_faint,
+                        font=(t.mono, 8), wraplength=W - 60, justify="left")
+        note.pack(anchor="w", pady=(10, 0))
+        self._chooser_note = note
+        self._describe_pick()
+
+        Button(wrap, "Set it up", self._accept_choice, t,
+               width=W - 52, height=30, size=10).pack(pady=(12, 0))
+
+    def _option_row(self, parent, opt: dict):
+        t = self.theme
+        row = tk.Frame(parent, bg=t.base)
+        row.pack(fill="x", pady=1)
+
+        label = f"{opt['name']}"
+        if opt["recommended"]:
+            label += "  — recommended"
+        if opt["installed"]:
+            label += "  (already downloaded)"
+        colour = {"good": t.text, "tight": t.text, "slow": t.text_dim,
+                  "no": t.text_faint}[opt["fit"]]
+
+        radio = tk.Radiobutton(
+            row, text=f"{FIT_WORD[opt['fit']]}  {label}", value=opt["name"],
+            variable=self._picked, command=self._describe_pick,
+            bg=t.base, fg=colour, selectcolor=t.base, activebackground=t.base,
+            activeforeground=t.text, font=font(t, 10), anchor="w",
+            highlightthickness=0, bd=0, takefocus=False,
+            state="disabled" if opt["fit"] == "no" and not opt["installed"] else "normal")
+        radio.pack(fill="x")
+        tk.Label(row, text=f"     {opt['size_gb']:.1f}GB · {opt['speed']}",
+                 bg=t.base, fg=t.text_faint, font=(t.mono, 8), anchor="w"
+                 ).pack(fill="x")
+
+    def _describe_pick(self):
+        chosen = self._picked.get()
+        for opt in llm.model_options():
+            if opt["name"] == chosen:
+                first = ("Already downloaded — this will take a moment."
+                         if opt["installed"] else
+                         f"{opt['size_gb']:.1f}GB to download, once.")
+                self._chooser_note.configure(text=f"{first}  {opt['blurb']}")
+                return
+
+    def _accept_choice(self):
+        chosen = self._picked.get()
+        config.set("llm_model", chosen)
+        config.set("llm_model_pinned", True)
+        for child in self.winfo_children():
+            child.destroy()
+        self._centre(H)
+        self._build()
+        threading.Thread(target=self._work, daemon=True).start()
 
     def _build(self):
         t = self.theme
@@ -138,8 +227,9 @@ class Splash(tk.Toplevel):
         def report(percent, message="", detail=""):
             self.after(0, self.set_progress, percent, message, detail)
 
-        model = llm.recommended_model()
-        config.set("llm_model", model)
+        model = config.get("llm_model") or llm.recommended_model()
+        if not config.get("llm_model"):
+            config.set("llm_model", model)
 
         if not llm.ollama_installed():
             report(None, "Installing Ollama, the bit that runs the model…",

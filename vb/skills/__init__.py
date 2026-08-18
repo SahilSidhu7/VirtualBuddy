@@ -6,10 +6,13 @@ name. Add new skill modules here as well as dropping the file in.
 """
 
 MODULES = (
+    "agenda",
     "apps",
+    "browsing",
     "filework",
     "pcgraph",
     "procs",
+    "seeing",
     "todo",
     "websearch",
 )

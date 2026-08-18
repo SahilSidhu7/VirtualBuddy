@@ -13,6 +13,7 @@ Two rules learned the hard way:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import urllib.error
@@ -34,8 +35,26 @@ LADDER = [
     (0, "qwen3:1.7b", "1.7B, for CPU or a very small card"),
 ]
 
+# What each one costs to download, and what the user gets for it. Sizes are the
+# Q4 quantisation Ollama serves by default.
+CATALOGUE = {
+    "qwen2.5:14b": (9.0, "Best answers. Wants a 14GB card."),
+    "llama3.1:8b": (4.9, "Strong all-rounder, good at using tools."),
+    # The agent loop spends most of its turns writing small scripts, and a
+    # coding model is markedly better at that than a general one the same size.
+    "qwen2.5-coder:7b": (4.7, "Best at writing the scripts the agent runs."),
+    "qwen2.5:7b": (4.7, "Nearly as good, a gigabyte lighter."),
+    "qwen3:4b": (2.6, "Quick and small. Fine for most tasks."),
+    "qwen3:1.7b": (1.4, "Runs on anything. Simple jobs only."),
+}
+
 _state: dict = {}
 _last_error: str | None = None
+
+
+def num_ctx() -> int:
+    """Context window to request. Kept in step with `backends.NUM_CTX`."""
+    return int(config.get("num_ctx", 8192) or 8192)
 
 
 # ---------------------------------------------------------------- hardware
@@ -83,6 +102,101 @@ def recommended_model() -> str:
         if have >= need:
             return name
     return LADDER[-1][1]
+
+
+def gpu_name() -> str:
+    if "gpu" in _state:
+        return _state["gpu"]
+    name = ""
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=8,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if out.returncode == 0:
+            name = out.stdout.strip().splitlines()[0].strip()
+    except (OSError, IndexError, subprocess.SubprocessError):
+        name = ""
+    _state["gpu"] = name
+    return name
+
+
+def ram_mb() -> int:
+    """System memory. Matters because a model too big for the card can still
+    run on the processor, just slowly."""
+    if "ram" in _state:
+        return _state["ram"]
+    total = 0
+    try:
+        import ctypes
+
+        class Status(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+        if sys.platform == "win32":
+            status = Status()
+            status.dwLength = ctypes.sizeof(Status)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+            total = status.ullTotalPhys // (1024 * 1024)
+        else:
+            total = (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+                     // (1024 * 1024))
+    except Exception:
+        total = 0
+    _state["ram"] = total
+    return total
+
+
+def hardware() -> dict:
+    """What this machine has, in the terms that decide which model to run."""
+    vram = vram_mb()
+    return {
+        "gpu": gpu_name(),
+        "vram_mb": vram,
+        "ram_mb": ram_mb(),
+        "cores": os.cpu_count() or 1,
+        "summary": (f"{gpu_name() or 'no GPU'}"
+                    + (f", {vram / 1024:.0f}GB video memory" if vram else "")
+                    + f", {ram_mb() / 1024:.0f}GB RAM"),
+    }
+
+
+def model_options() -> list[dict]:
+    """Every model, with an honest word about how it will run here.
+
+    The ladder already picks one automatically. This exists so the user can
+    overrule it during setup — someone who does not mind waiting may want the
+    14B on an 8GB card, and someone on battery may want the 1.7B on a 16GB one.
+    Both are reasonable, and only they know which.
+    """
+    vram, ram = vram_mb(), ram_mb()
+    best = recommended_model()
+    out = []
+    for name, (size_gb, blurb) in CATALOGUE.items():
+        need = size_gb * 1024 * 1.2          # weights plus room for context
+        if vram >= need:
+            fit, speed = "good", "runs on the graphics card"
+        elif vram >= need * 0.65:
+            fit, speed = "tight", "mostly on the card, some spill to RAM"
+        elif ram >= need * 1.5:
+            fit, speed = "slow", "on the processor — several times slower"
+        else:
+            fit, speed = "no", "too big for this machine"
+        out.append({
+            "name": name, "size_gb": size_gb, "blurb": blurb,
+            "fit": fit, "speed": speed,
+            "installed": installed(name),
+            "recommended": name == best,
+        })
+    return out
 
 
 # ------------------------------------------------------------------ server
@@ -190,7 +304,22 @@ def ask(prompt: str, system: str = "", *, json_mode: bool = False,
         "prompt": prompt,
         "stream": False,
         "keep_alive": KEEP_ALIVE,
-        "options": {"num_predict": max_tokens, "temperature": temperature},
+        # Reasoning models (hermes-agent, qwen3) put their chain of thought in
+        # a separate `thinking` field and leave `response` **empty**. Nothing
+        # here reads `thinking`, so every call returned None and the model
+        # looked broken — the same silent-failure shape as the prefix-match bug
+        # above. `think` is ignored by models without the capability, so it is
+        # safe to send unconditionally.
+        "think": False,
+        "options": {"num_predict": max_tokens, "temperature": temperature,
+                    # Without this the model's *own* declared context wins, and
+                    # some declare a very large one: hermes-agent asks for
+                    # 262144 tokens, whose KV cache does not fit an 8GB card.
+                    # Ollama then answers 500 "llama-server startup failed
+                    # before projector CPU offload retry: ... cudaMalloc failed:
+                    # out of memory" and every call through here returns None.
+                    # /api/chat already pins it; this path never did.
+                    "num_ctx": num_ctx()},
     }
     if system:
         payload["system"] = system
@@ -200,6 +329,10 @@ def ask(prompt: str, system: str = "", *, json_mode: bool = False,
     if not out:
         return None
     text = (out.get("response") or "").strip()
+    if not text:
+        # A model that ignored `think: false` and spent the whole budget
+        # reasoning. Its thoughts are better than nothing.
+        text = (out.get("thinking") or "").strip()
     return strip_thinking(text) or None
 
 
