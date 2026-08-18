@@ -7,7 +7,7 @@
 ; alone by both install and uninstall.
 
 #ifndef AppVersion
-  #define AppVersion "0.8.0"
+  #define AppVersion "0.8.1"
 #endif
 
 #define AppName "VirtualBuddy"
