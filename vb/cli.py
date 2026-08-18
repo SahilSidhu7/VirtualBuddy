@@ -20,6 +20,7 @@ BANNER = """VirtualBuddy — type what you want, or:
   /traces            what has been recorded for fine-tuning
   /good  /bad why    was the last answer right? the only label worth trusting
   /testlog [bad]     write the testing log to a file you can send on
+  /new               forget the conversation and start fresh
   /auto  /manual     run matches straight away, or confirm first
   /quit
 """
@@ -173,6 +174,10 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if line in ("/quit", "/exit"):
             return 0
+        if line in ("/new", "/forget", "/reset"):
+            agent.forget_conversation()
+            print("  started fresh — earlier messages forgotten.")
+            continue
         if line == "/skills":
             for name, sk in sorted(skills.items()):
                 print(f"  {name:16} {sk.description}")

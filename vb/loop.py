@@ -65,6 +65,11 @@ How to work:
 - Never write a number you have not seen. If you are putting sizes, counts or
   dates into a file or an answer, they must be figures a tool printed to you.
   Go and get them first.
+- Earlier turns above are there for context, not to copy. When the user follows
+  up — "and my cpu?", "do the same for downloads", "the first one" — work out
+  what they now mean from that context, then go and get it with a tool. A short
+  follow-up is still a fresh request: answer it with new information, never by
+  restating an earlier answer.
 
 What you must not do:
 - Do not sign in to anything, fill in an application, buy anything or pay.
@@ -223,10 +228,32 @@ def _signature(call: backends.ToolCall) -> str:
     return call.name + ":" + hashlib.sha1(body.encode("utf-8")).hexdigest()
 
 
+def _conversation(history: list[dict] | None) -> list[dict]:
+    """Sanitised prior turns for the prompt.
+
+    Only user and assistant text, only strings, and never a system role slipped
+    in from elsewhere. Empty when there is nothing, which is the common case and
+    keeps a first request exactly as it was before history existed.
+    """
+    if not history:
+        return []
+    out = []
+    for msg in history:
+        role = msg.get("role")
+        content = msg.get("content")
+        if role in ("user", "assistant") and isinstance(content, str) and content:
+            out.append({"role": role, "content": content})
+    return out[-(HISTORY_MESSAGES):]
+
+
+HISTORY_MESSAGES = 12          # six exchanges, matching the Agent's own cap
+
+
 def run(request: str, *, approve: ApprovalFn | None = None,
         max_steps: int = MAX_STEPS, allow_critic: bool = True,
         deadline: float | None = None, start_tier: str = "work",
         only_tools: list[str] | None = None,
+        history: list[dict] | None = None,
         _record_episode: bool = True) -> Outcome:
     """Work on a request until it is done, refused, or out of budget.
 
@@ -255,7 +282,14 @@ def run(request: str, *, approve: ApprovalFn | None = None,
         offered = [t for t in only_tools if tools.get(t)] + ["finish"]
         offered = list(dict.fromkeys(offered))
     schemas = tools.schemas(offered)
+    # Prior turns go between the system prompt and this request, so a follow-up
+    # like "and my cpu?" or "delete the first one" is read against what was
+    # just said. These are the plain question/answer pairs the front end kept,
+    # not full transcripts — enough to resolve a reference without dragging a
+    # whole earlier task's tool output into this one's context.
+    prior = _conversation(history)
     messages = [{"role": "system", "content": system},
+                *prior,
                 {"role": "user", "content": request}]
 
     # Starting on a tier that cannot answer is not a slow start, it is a dead

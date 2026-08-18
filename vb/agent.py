@@ -84,10 +84,61 @@ class Turn:
         return f"{self.pending.skill.name}({args})"
 
 
+# How much of the conversation to carry forward. Six exchanges is enough for
+# "open my downloads / delete the first one / no the other one" without letting
+# a long session push the actual request out of the model's context.
+HISTORY_TURNS = 6
+# Each remembered answer is clipped: a directory listing or a research write-up
+# is thousands of characters, and the follow-up only needs to know what was
+# being discussed, not to re-read all of it.
+HISTORY_ANSWER_CHARS = 600
+
+# A message that only makes sense as a reply to the last one. Either it opens
+# like a continuation ("and…", "what about…", "no, the other one"), or it
+# points back at something already on screen ("that", "the first one",
+# "them", "do it again"). These carry no subject of their own, so the router
+# scores them as noise — they have to go to the loop with the history attached.
+_FOLLOWUP = re.compile(
+    r"^\s*(and|also|then|or|but|what about|how about|no[, ]|actually|"
+    r"instead|plus|again)\b"
+    r"|\b(that one|this one|the (first|second|third|last|next|other|same) one|"
+    r"those|them|it|do it again|the same|that file|that folder)\b",
+    re.I)
+
+
+def _looks_like_followup(prompt: str) -> bool:
+    # Long sentences carry their own subject; the short ones are the ones that
+    # lean on what came before. The length guard stops "and then generate a
+    # full report on…" — a complete request that happens to start with "and" —
+    # from being treated as a bare reference.
+    return len(prompt.split()) <= 8 and bool(_FOLLOWUP.search(prompt))
+
+
 class Agent:
     def __init__(self, router: Router | None = None):
         self.router = router or Router()
         self.last: Turn | None = None
+        # The conversation so far, as chat messages. In memory only: this is
+        # the thread of one sitting, not a fact worth keeping between runs, and
+        # writing it to disk would be the wrong kind of permanence.
+        self.history: list[dict] = []
+
+    def _remember(self, prompt: str, result: "Result | None") -> None:
+        """Add one completed exchange to the running history."""
+        if not result or not (result.text or "").strip():
+            return
+        answer = " ".join(result.text.split())[:HISTORY_ANSWER_CHARS]
+        self.history.append({"role": "user", "content": prompt})
+        self.history.append({"role": "assistant", "content": answer})
+        # Kept in whole exchanges, so a truncation never leaves a dangling
+        # question with no answer or an answer with no question.
+        extra = len(self.history) - HISTORY_TURNS * 2
+        if extra > 0:
+            self.history = self.history[extra:]
+
+    def forget_conversation(self) -> None:
+        """Drop the running history — a fresh start without a restart."""
+        self.history = []
 
     # -- routing ---------------------------------------------------------
     def handle(self, prompt: str, on_progress=None) -> Turn:
@@ -101,7 +152,13 @@ class Agent:
         # well, because scoring well on half a request is the failure mode:
         # "open browser and start applying to jobs" matched open_app at 0.61
         # and would have opened a browser and stopped there.
-        if _looks_multi_step(prompt) or best_score < PLAN_THRESHOLD:
+        # A follow-up leans on the last answer, which only the loop can see.
+        # It goes there even when a skill scored well, because the fast path
+        # runs a skill with no memory of the conversation — "delete the first
+        # one" would match delete_file and then have nothing to delete.
+        followup = bool(self.history) and _looks_like_followup(prompt)
+
+        if followup or _looks_multi_step(prompt) or best_score < PLAN_THRESHOLD:
             ready, why = loop.available()
             if ready:
                 # Hand it to the loop. Routing stays cheap: nothing is asked of
@@ -189,6 +246,7 @@ class Agent:
         detail = " ".join(x for x in (plan.cannot, plan.note) if x)
         turn.result = Result(ok=True, text="\n\n".join(lines), detail=detail,
                              data=data)
+        self._remember(turn.prompt, turn.result)
         return turn.result
 
     def run_task(self, turn: Turn, approve: Callable[[str, dict, str], bool] | None = None,
@@ -202,11 +260,13 @@ class Agent:
         """
         with progress.listening(on_progress):
             outcome = loop.run(turn.prompt, approve=approve,
+                               history=self.history,
                                max_steps=int(config.get("agent_max_steps")
                                              or loop.MAX_STEPS))
         turn.outcome = outcome
         turn.result = outcome.as_result()
         self.last = turn
+        self._remember(turn.prompt, turn.result)
         return turn.result
 
     def confirm(self, turn: Turn | None = None, choice: int = 0,
@@ -219,4 +279,5 @@ class Agent:
         turn.pending = None
         turn.result = self.run(match, on_progress=on_progress,
                                question=turn.prompt)
+        self._remember(turn.prompt, turn.result)
         return turn.result
