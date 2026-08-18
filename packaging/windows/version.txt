@@ -1,8 +1,8 @@
 # Windows file-version resource. Keep the numbers in step with vb/__init__.py.
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(0, 8, 1, 0),
-    prodvers=(0, 8, 1, 0),
+    filevers=(0, 9, 0, 0),
+    prodvers=(0, 9, 0, 0),
     mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0,
     date=(0, 0)
   ),
@@ -11,12 +11,12 @@ VSVersionInfo(
       StringTable('040904B0', [
         StringStruct('CompanyName', 'VirtualBuddy'),
         StringStruct('FileDescription', 'A small assistant that lives on your desktop'),
-        StringStruct('FileVersion', '0.8.1'),
+        StringStruct('FileVersion', '0.9.0'),
         StringStruct('InternalName', 'VirtualBuddy'),
         StringStruct('LegalCopyright', 'Free and open source. MIT licensed.'),
         StringStruct('OriginalFilename', 'VirtualBuddy.exe'),
         StringStruct('ProductName', 'VirtualBuddy'),
-        StringStruct('ProductVersion', '0.8.1'),
+        StringStruct('ProductVersion', '0.9.0'),
       ])
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])

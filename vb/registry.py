@@ -24,6 +24,23 @@ class Skill:
     danger: bool = False          # needs confirmation even in auto mode
     slow: bool = False            # long-running; UI shows a working state
     tags: list[str] = field(default_factory=list)
+    requires: list[str] = field(default_factory=list)
+    """Words at least one of which must appear for this skill to be considered.
+
+    Similarity matches a sentence *frame*, not its subject: "what is my gpu
+    doing" scored `claude_status` at 0.65 purely on "what is my ___ doing",
+    with the word that carried the meaning — claude — absent. A skill named for
+    an entity declares it here, and the router drops the skill outright when
+    none of the words is present, rather than ranking it on the frame alone.
+    """
+    broad: bool = False
+    """A whole-machine skill that takes no particular path.
+
+    `pc_summary` answers "what is on my pc"; asked "how many .py files are in
+    C:/Projects/MAIN/miniVE/src" it counted the whole disk, because "how many"
+    matched. When the prompt names a specific path the router demotes these, so
+    the precise question reaches the agent loop that can actually answer it.
+    """
     triggers: list[str] = field(default_factory=list)
     """Regexes that give this skill away.
 
@@ -56,13 +73,14 @@ class Result:
 
 def skill(name: str, description: str, phrases: list[str], *,
           slots=None, danger: bool = False, slow: bool = False, tags=None,
-          triggers=None):
+          triggers=None, requires=None, broad: bool = False):
     """Decorator registering the wrapped function as a skill."""
     def deco(fn):
         _REGISTRY[name] = Skill(
             name=name, description=description, phrases=phrases, run=fn,
             slots=slots, danger=danger, slow=slow, tags=list(tags or []),
-            triggers=list(triggers or []),
+            triggers=list(triggers or []), requires=list(requires or []),
+            broad=broad,
         )
         return fn
     return deco

@@ -180,6 +180,7 @@ def recent_files(where: str = "", ext: str = "", **_) -> Result:
     tags=["pc"],
     triggers=[r"\b(how many|overview|summar\w+|breakdown|break down)\b",
               r"\bwhat kinds?\b"],
+    broad=True,
 )
 def pc_summary(**_) -> Result:
     if (gate := _need_index()):

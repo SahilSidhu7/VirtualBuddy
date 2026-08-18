@@ -27,6 +27,11 @@ TRIGGER_CAP = 0.34        # never enough to win on keywords alone
 # and the cost of guessing wrong is not symmetric.
 DANGER_MARGIN = 0.12
 
+# Enough to drop a whole-machine skill below the point where anything runs it,
+# when the prompt named a specific path. Not zero, so it survives as a visible
+# alternative rather than vanishing.
+BROAD_PENALTY = 0.40
+
 
 _URL = re.compile(r"https?://\S+|\b(?:www\.)?[\w-]+\.(?:com|org|net|io|dev|ai|co|in)\b\S*", re.I)
 # A typed path: drive letter, ~, or two or more separated segments.
@@ -102,13 +107,26 @@ class Router:
         if self._matrix is None or not prompt.strip():
             return []
         clean = normalise(prompt)
+        # A specific path in the prompt: normalise() turns a real one into the
+        # token "path". That is the signal that a whole-machine skill is the
+        # wrong answer to what is actually a question about one folder.
+        has_path = " path " in f" {clean} "
+        lower = prompt.lower()
         sims = textvec.similarity(self._matrix, textvec.encode(clean)[0])
         best: dict[str, float] = {}
         for name, score in zip(self._names, sims):
             if score > best.get(name, -1):
                 best[name] = float(score)
-        for name in best:
+        for name in list(best):
+            sk = self.skills[name]
+            # A skill named for an entity does not get to win on sentence shape
+            # alone: drop it unless one of its words is actually present.
+            if sk.requires and not any(w in lower for w in sk.requires):
+                del best[name]
+                continue
             best[name] = min(1.0, best[name] + self._bonus(name, clean))
+            if sk.broad and has_path:
+                best[name] -= BROAD_PENALTY
         ordered = sorted(best.items(), key=lambda kv: kv[1], reverse=True)
         out = []
         for name, score in ordered[:top]:

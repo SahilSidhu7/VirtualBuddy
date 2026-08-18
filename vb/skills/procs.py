@@ -105,7 +105,12 @@ def running_apps(**_) -> Result:
     slots=lambda t: {"target": slots.after(t, KILL_VERBS)}, danger=True, tags=["pc"],
     triggers=[r"\b(kill|terminate|force quit|shut down|shutdown)\b",
               r"\b(close|stop|end|quit)\b.{0,24}\b(app|process|program|chrome|"
-              r"spotify|discord|steam|notepad|zoom|edge|firefox)\b"],
+              r"spotify|discord|steam|notepad|zoom|edge|firefox)\b",
+              # "close whatsapp" names an app the enumerated list will never
+              # cover; treat "close/quit/exit <something>" as a kill unless it
+              # plainly means a file, folder, tab or window instead.
+              r"\b(close|quit|exit)\b(?!.*\b(path|link|folder|file|tab|"
+              r"window|browser|door)\b)"],
 )
 def kill_app(target: str = "", **_) -> Result:
     psutil = _psutil()
@@ -190,3 +195,115 @@ def pc_health(**_) -> Result:
     lines.append(f"Uptime {int(up // 86400)}d {int(up % 86400 // 3600)}h "
                  f"{int(up % 3600 // 60)}m")
     return Result(text="\n".join(lines))
+
+
+# --------------------------------------------------------------------- GPU
+import subprocess
+
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+# What to ask nvidia-smi for, in order. Fields a laptop does not expose come
+# back as "[N/A]" rather than failing the whole query, so each is handled as
+# maybe-missing.
+_GPU_FIELDS = ("name", "utilization.gpu", "memory.used", "memory.total",
+               "temperature.gpu", "power.draw", "power.limit", "fan.speed")
+
+
+def _smi(query: str, extra: str = "") -> str | None:
+    """One nvidia-smi query, or None when there is no NVIDIA GPU to ask."""
+    args = ["nvidia-smi", f"--query-{query}",
+            "--format=csv,noheader,nounits"]
+    if extra:
+        args.append(extra)
+    try:
+        out = subprocess.run(args, capture_output=True, text=True, timeout=8,
+                             creationflags=_NO_WINDOW)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout if out.returncode == 0 else None
+
+
+def _num(value: str) -> str:
+    """A field, or "" when nvidia-smi reported it as unavailable."""
+    value = (value or "").strip()
+    return "" if value in ("", "[N/A]", "N/A") else value
+
+
+@skill(
+    "gpu_status",
+    "Show what the graphics card is doing: load, memory, temperature",
+    ["what is my gpu doing", "how is my gpu", "gpu usage", "gpu load",
+     "how hot is my gpu", "graphics card temperature", "is my gpu busy",
+     "what's my graphics card doing", "gpu memory", "vram usage",
+     "what is using my gpu"],
+    tags=["pc"],
+    triggers=[r"\bgpu\b", r"\bgraphics card\b", r"\bvram\b", r"\bcuda\b"],
+    requires=["gpu", "graphics", "vram", "cuda", "video card"],
+)
+def gpu_status(**_) -> Result:
+    rows = _smi("gpu=" + ",".join(_GPU_FIELDS))
+    if rows is None:
+        return Result.fail(
+            "I could not read a GPU.",
+            "This reads an NVIDIA card through nvidia-smi. If you have an "
+            "integrated or AMD GPU, Windows Task Manager’s Performance tab "
+            "shows it instead.")
+
+    lines = []
+    for line in rows.strip().splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        parts += [""] * (len(_GPU_FIELDS) - len(parts))
+        (name, util, used, total, temp, draw, limit, fan) = parts[:8]
+        lines.append(name or "GPU")
+        bits = []
+        if _num(util):
+            bits.append(f"load {util}%")
+        if _num(used) and _num(total):
+            pct = f" ({int(used) * 100 // int(total)}%)" if total.isdigit() \
+                  and int(total) else ""
+            bits.append(f"memory {int(float(used)):,}/{int(float(total)):,} MB{pct}")
+        if _num(temp):
+            bits.append(f"{temp}°C")
+        if _num(draw):
+            power = f"{float(draw):.0f}W"
+            if _num(limit):
+                power += f" of {float(limit):.0f}W"
+            bits.append(power)
+        if _num(fan):
+            bits.append(f"fan {fan}%")
+        lines.append("  " + "  ·  ".join(bits))
+
+    # What is actually on the card. Answers "what is using my gpu", and
+    # explains a card sitting warm with full VRAM and no load — a resident
+    # model, usually.
+    procs = _gpu_processes()
+    if procs:
+        lines.append("")
+        lines.append("Using the GPU:")
+        lines += procs
+
+    return Result(text="\n".join(lines),
+                  detail="Read live from nvidia-smi.")
+
+
+def _gpu_processes(limit: int = 6) -> list[str]:
+    rows = _smi("compute-apps=process_name,used_memory")
+    if not rows:
+        return []
+    seen: dict[str, float] = {}
+    for line in rows.strip().splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if not parts or not parts[0]:
+            continue
+        name = parts[0].replace("\\", "/").split("/")[-1]
+        # A process the query could not see into. It is on the card but says
+        # nothing useful, so it is noise in a "what is using my GPU" answer.
+        if not name or name.startswith("["):
+            continue
+        mb = _num(parts[1]) if len(parts) > 1 else ""
+        seen[name] = seen.get(name, 0.0) + (float(mb) if mb.replace(".", "").isdigit() else 0.0)
+    ranked = sorted(seen.items(), key=lambda kv: -kv[1])
+    out = []
+    for name, mb in ranked[:limit]:
+        out.append(f"  {mb:,.0f} MB  {name}" if mb else f"  {name}")
+    return out

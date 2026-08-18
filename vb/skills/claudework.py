@@ -21,6 +21,7 @@ from vb.registry import Result, skill
      "what has claude been working on", "claude sessions"],
     triggers=[r"\bclaude\b.*\b(status|sessions?|doing|working)\b",
               r"\b(what|show).*\bclaude\b"],
+    requires=["claude"],
 )
 def claude_status(**_) -> Result:
     ready, why = claudecode.available()
@@ -35,6 +36,7 @@ def claude_status(**_) -> Result:
     ["ask claude to", "get claude to", "have claude build",
      "use claude to build", "tell claude to fix", "claude build me"],
     triggers=[r"\b(ask|get|have|tell|use)\s+claude\b"],
+    requires=["claude"],
     danger=True,          # spends the plan's quota, and writes files
 )
 def ask_claude(task: str = "", project: str = "", **_) -> Result:
@@ -86,6 +88,7 @@ def ask_claude(task: str = "", project: str = "", **_) -> Result:
     ["run my queued claude jobs", "retry my claude jobs",
      "resume claude", "run queued claude work"],
     triggers=[r"\b(queued|resume|retry)\b.*\bclaude\b"],
+    requires=["claude"],
 )
 def run_queued_claude(**_) -> Result:
     """What the scheduled wake-up runs. Also safe to run by hand."""
