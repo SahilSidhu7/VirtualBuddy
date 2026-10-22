@@ -56,7 +56,7 @@ def _parse(actions: str) -> tuple[list[dict], str]:
 
 @skill(
     "browse",
-    "Open a page in a real browser and click, type or scroll on it",
+    "Read or click through a page in a hidden background browser (not a window the user sees; to open their browser use search_in_browser or open_site)",
     ["click the next button on", "search on that site for", "type into the box on",
      "scroll down the page and read", "use the site's own search",
      "interact with the page", "press the button on"],
@@ -80,12 +80,23 @@ def browse(url: str, actions: str = "") -> Result:
     if problem:
         return Result.fail(problem)
 
-    if not browser.chromium_ready():
-        progress.say("Setting up the browser (one time, ~150MB)…")
-        if not browser.ensure(on_progress=progress.say):
-            return Result.fail(
-                "The browser could not be set up.",
-                "Try `pip install playwright` then `playwright install chromium`.")
+    note = ""
+    if steps and not browser.can_act():
+        if browser.frozen():
+            # The packaged app cannot add Playwright, so do not pretend to try:
+            # read the page instead, and say plainly what was not done.
+            steps, note = [], ("I can read pages in this version but not click "
+                               "or type on them. That needs the source install "
+                               "with Playwright.")
+        else:
+            progress.say("Setting up the browser (one time, ~150MB)…")
+            if not browser.ensure(on_progress=progress.say):
+                return Result.fail(
+                    "The browser could not be set up.",
+                    "Try `pip install playwright` then `playwright install chromium`.")
+    if not steps and not browser.can_render():
+        return Result.fail("There is no browser on this PC I can use.",
+                           "Install Microsoft Edge or Google Chrome.")
 
     progress.say(f"Opening {url}…" if not steps else
                  f"Working through {len(steps)} actions on {url}…")
@@ -98,4 +109,4 @@ def browse(url: str, actions: str = "") -> Result:
     return Result(
         text=f"{page.title}\n{page.url}\n\n{text[:3000]}"
              + ("\n… [page continues]" if len(text) > 3000 else ""),
-        data={"url": page.url, "title": page.title})
+        detail=note, data={"url": page.url, "title": page.title})

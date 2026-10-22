@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import webbrowser
+from urllib.parse import quote_plus
 from difflib import get_close_matches
 from pathlib import Path
 
@@ -163,3 +165,103 @@ def open_folder(name: str = "", **_) -> Result:
                            "Known: " + ", ".join(known))
     _launch(str(path))
     return Result(text=f"Opened {path}")
+
+
+# ------------------------------------------------------- search in a browser
+# Where each browser keeps its executable, relative to the usual roots. Brave
+# installs per user into LOCALAPPDATA by default, so Program Files alone misses
+# it — which is how "open brave" fell through to the Start Menu fuzzy match.
+BROWSERS = {
+    "brave": ("BraveSoftware/Brave-Browser/Application/brave.exe",
+              "https://search.brave.com/search?q="),
+    "chrome": ("Google/Chrome/Application/chrome.exe",
+               "https://www.google.com/search?q="),
+    "edge": ("Microsoft/Edge/Application/msedge.exe",
+             "https://www.bing.com/search?q="),
+    "firefox": ("Mozilla Firefox/firefox.exe",
+                "https://duckduckgo.com/?q="),
+    "opera": ("Programs/Opera/opera.exe", "https://www.google.com/search?q="),
+    "vivaldi": ("Vivaldi/Application/vivaldi.exe",
+                "https://www.google.com/search?q="),
+}
+_BROWSER_WORD = "|".join(list(BROWSERS) + ["microsoft edge", "google chrome",
+                                           "the browser", "my browser",
+                                           "browser"])
+_SEARCH_WORDS = (r"(?:search(?: for)?|look(?: up| for)?|find|google|show me|"
+                 r"check(?: out)?)")
+
+
+def _browser_slots(text: str) -> dict:
+    """"open brave and look for the best new mobiles" ->
+    browser=brave, query="the best new mobiles"."""
+    low = text.lower()
+    found = re.search(rf"\b({_BROWSER_WORD})\b", low)
+    name = found.group(1) if found else ""
+    name = {"microsoft edge": "edge", "google chrome": "chrome"}.get(name, name)
+    if name not in BROWSERS:
+        name = ""
+    query = ""
+    m = re.search(rf"\b{_SEARCH_WORDS}\s+(.+)$", low)
+    if m:
+        query = m.group(1)
+        # "... in brave" / "... on chrome" at the end is the browser, not the query
+        query = re.sub(rf"\s+(?:in|on|using|with)\s+(?:{_BROWSER_WORD})\b.*$",
+                       "", query)
+    return {"browser": name, "query": query.strip(" .?!")}
+
+
+def _browser_exe(name: str) -> str | None:
+    rel = BROWSERS.get(name, ("", ""))[0]
+    if not rel:
+        return None
+    for key in ("LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)"):
+        root = os.environ.get(key, "")
+        if root and (Path(root) / rel).exists():
+            return str(Path(root) / rel)
+    exe = Path(rel).name
+    from shutil import which
+    return which(exe) or which(exe.removesuffix(".exe"))
+
+
+@skill(
+    "search_in_browser",
+    "Open a browser the user names, on screen, and search for something in it",
+    ["open brave and search for cheap flights",
+     "open chrome and look for the best new phones",
+     "search for laptops in edge", "look up the weather in firefox",
+     "open my browser and find concert tickets",
+     "google best headphones in chrome"],
+    slots=_browser_slots, tags=["web", "local", "compound"],
+    # Beats `open_app`, which otherwise takes "open brave and look for X" as
+    # an app called "brave and look for X", and the agent's hidden `browse`
+    # tool, which renders off screen when the user wanted to see the window.
+    triggers=[rf"\b({_BROWSER_WORD})\b.*\b{_SEARCH_WORDS}\b",
+              rf"\b{_SEARCH_WORDS}\b.*\b(in|on|using|with)\s+({_BROWSER_WORD})\b"],
+)
+def search_in_browser(browser: str = "", query: str = "", **_) -> Result:
+    name = (browser or "").strip().lower()
+    query = (query or "").strip()
+    engine = BROWSERS.get(name, ("", "https://www.google.com/search?q="))[1]
+    url = engine + quote_plus(query) if query else engine.split("/search")[0]
+
+    exe = _browser_exe(name) if name else None
+    if name and not exe:
+        hit = _closest(name, _index_cache())
+        if hit and sys.platform == "win32":
+            # A Start Menu shortcut takes arguments through startfile.
+            os.startfile(str(hit), arguments=url)              # noqa: S606
+            return Result(text=f"Opened {hit.stem} and searched for “{query}”."
+                          if query else f"Opened {hit.stem}.")
+        webbrowser.open(url)
+        return Result(text=f"I could not find {name}, so I searched in your "
+                           f"default browser instead.", detail=url)
+    try:
+        if exe:
+            subprocess.Popen([exe, url])
+        else:
+            webbrowser.open(url)
+    except OSError as exc:
+        return Result.fail(f"Couldn't start {name or 'the browser'}.", str(exc))
+    shown = name.title() if name else "your browser"
+    return Result(text=f"Opened {shown} and searched for “{query}”."
+                  if query else f"Opened {shown}.", detail=url)

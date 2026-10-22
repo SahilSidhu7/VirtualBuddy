@@ -117,6 +117,11 @@ UNSEEN = [
     ("open C:/Projects/thing/readme.md", "read_file"),
     ("read https://example.com/article", "read_page"),
     ("summarise https://news.ycombinator.com/item?id=1", "read_page"),
+    # From a test session: this went to the loop, which picked the hidden
+    # `browse` tool and sat "Installing Playwright" for seven minutes.
+    ("open brave and look for the best new mobiles", "search_in_browser"),
+    ("search for gaming laptops in edge", "search_in_browser"),
+    ("open brave", "open_app"),
 ]
 
 

@@ -176,7 +176,13 @@ class Agent:
             self.last = turn
             return turn
 
-        if followup or _looks_multi_step(prompt) or best_score < PLAN_THRESHOLD:
+        # A skill built for a two-verb sentence ("open brave and search for
+        # X") owns that sentence when its trigger fired; splitting it into
+        # two jobs sent it to the loop, which reached for a hidden browser.
+        compound = (top is not None and "compound" in top.skill.tags
+                    and top.score >= AUTO_THRESHOLD)
+        if followup or (_looks_multi_step(prompt) and not compound) \
+                or best_score < PLAN_THRESHOLD:
             ready, why = loop.available()
             if ready:
                 # Hand it to the loop. Routing stays cheap: nothing is asked of

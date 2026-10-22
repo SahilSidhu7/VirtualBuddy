@@ -63,10 +63,20 @@ def status() -> dict:
 
 def install_packages(on_progress=None) -> bool:
     import subprocess
+    # The packaged app has no pip: `sys.executable` is VirtualBuddy.exe, and
+    # this would start a second buddy and wait on it forever.
+    if getattr(sys, "frozen", False):
+        if on_progress:
+            on_progress("Voice needs the source install (pip install vosk sounddevice).")
+        return False
     if on_progress:
         on_progress("Installing vosk and sounddevice…")
-    ok = subprocess.run([sys.executable, "-m", "pip", "install", "vosk", "sounddevice"],
-                        capture_output=True).returncode == 0
+    try:
+        ok = subprocess.run([sys.executable, "-m", "pip", "install", "vosk",
+                             "sounddevice"], capture_output=True,
+                            timeout=600).returncode == 0
+    except subprocess.TimeoutExpired:
+        ok = False
     return ok
 
 
