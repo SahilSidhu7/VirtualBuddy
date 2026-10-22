@@ -4,9 +4,11 @@ A small companion that lives on your desktop and runs prebuilt skills. Type or
 talk to it, it finds the skill that matches, and either shows you the match or
 just runs it.
 
-Its main job is the web: searching, scraping, and researching across sites. All
-of that works with no API keys, no accounts, and no cloud model. A local LLM is
-optional and only makes the write-ups better.
+It works on your PC, researches the web with cited sources, and answers
+questions — and it **grows**: when you ask for something new it works it out
+the long way, then writes itself a tool and tests it, so the next request like
+it is one quick step. The brain is NVIDIA's free API (build.nvidia.com), so no
+graphics card is needed.
 
 ```
 you › research the best budget monitors
@@ -139,28 +141,41 @@ catastrophic for *append this to X*.
 
 ## The model
 
-VirtualBuddy needs a local model, and sets one up on first run behind a
-progress bar: it installs [Ollama](https://ollama.com) if it is missing,
-downloads a model, and loads it into the graphics card so your first question
-is not the slow one.
+VirtualBuddy uses NVIDIA's free, OpenAI-compatible API. Get a key at
+[build.nvidia.com](https://build.nvidia.com) (it starts with `nvapi-`) and
+paste it into the window that appears on first run. It is saved to
+`~/.virtualbuddy/.env` and nowhere else. You can also set `NVIDIA_API_KEY` in
+the environment.
 
-Which model depends on your card, measured with `nvidia-smi` rather than
-Windows, which reports an 8GB card as 4GB:
+Each tier is a list, tried in order, because which models answer on the free
+tier changes: a model that 404s for your account is skipped for the session,
+and one that is rate limited or slow hands over to the next.
 
-| Video memory | Model |
-|---|---|
-| 14GB and up | `qwen2.5:14b` |
-| 8GB | `llama3.1:8b` |
-| 6GB | `qwen2.5:7b` |
-| 4GB | `qwen3:4b` |
-| less, or no GPU | `qwen3:1.7b` |
+| Tier | Default models | Used for |
+|---|---|---|
+| work | `nemotron-3-ultra-550b`, `gpt-oss-20b`, `nemotron-3.5-lightning-30b` | the agent loop, writing tools, research write-ups |
+| fast | `nemotron-3.5-lightning-30b`, `gpt-oss-20b` | the critic, reading a tool's arguments |
+| vision | `nemotron-3.5-super-vl-120b` | "what is on my screen" |
+| embed | `nemotron-3.5-embed-1b` | memory search |
 
-Pick a different one by setting `llm_model` and `llm_model_pinned: true` in
-`~/.virtualbuddy/config.json`.
+Override with `work_models`, `fast_models`, `vision_model`, `embed_model` in
+`~/.virtualbuddy/config.json`, or `/model` in `python run.py --cli`.
 
-Without a model you can still run everything local (files, processes, the file
-graph), but web answers degrade to scraped page text, and the buddy says so
-rather than pretending that was the answer.
+Without a key you can still run everything local (files, processes, the file
+graph), but web answers degrade to scraped page text, and the buddy says so.
+
+## Growing: tools it writes for itself
+
+After a request that needed real work and passed the critic, the buddy turns
+what it did into a Python function with named arguments, **runs it on the same
+request, and keeps it only if it gives the same answer**. The router then sends
+similar requests straight to it: one fast call to read the arguments, one
+script, no loop. Measured: 11.6s the first time, 0.7s after.
+
+Tools live in `~/.virtualbuddy/tools/<name>/` as `tool.py` + `tool.json` —
+plain files you can read, edit or delete. A tool that fails three times is
+retired. Ask "make a tool that …" to build one on purpose, "what tools have you
+made" to see them, "forget the tool …" to drop one.
 
 ## Progress, not spinners
 
@@ -269,7 +284,9 @@ vb/
   registry.py   the @skill decorator and discovery
   slots.py      pulling arguments out of a sentence
   agent.py      route, confirm, run
-  llm.py        optional Ollama client
+  provider.py   NVIDIA API client: model chains, embeddings, vision
+  llm.py        one-shot questions on top of it
+  forge.py      tools the buddy writes, tests and keeps
   voice.py      optional offline speech input
   web/          search, tiered fetch, extraction
   pc/           the file graph, and guarded file editing

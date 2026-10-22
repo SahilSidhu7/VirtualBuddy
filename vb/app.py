@@ -72,12 +72,7 @@ class App:
             on = startup.enabled()
             m.add_command(label=("● " if on else "   ") + "Start with Windows",
                           command=self.toggle_startup)
-        state = llm.status()
-        if state["state"] == "no_model":
-            m.add_command(label=f"Download {config.get('llm_model')} for smart mode",
-                          command=self.pull_model)
-        else:
-            m.add_command(label=state["message"], state="disabled")
+        m.add_command(label=llm.status()["message"][:60], state="disabled")
         m.add_separator()
         m.add_command(label="Quit", command=self.quit)
         m.tk_popup(event.x_root, event.y_root)
@@ -94,20 +89,6 @@ class App:
         self.panel.show_result(_note(message if ok else "Couldn't change that.",
                                      "" if ok else message))
 
-    def pull_model(self):
-        """Download the model in the background; the sprite shows it's busy."""
-        self.pet.set_state("working")
-
-        def done(ok: bool):
-            self.pet.set_state("idle")
-            self.panel.refresh_footer()
-            if not ok:
-                self.panel.show_at(*self.pet.anchor())
-                self.visible = True
-
-        threading.Thread(
-            target=lambda: self.root.after(0, done, llm.pull()), daemon=True).start()
-
     # -- lifecycle -------------------------------------------------------
     def quit(self):
         self.root.quit()
@@ -118,7 +99,7 @@ class App:
 
 
 def main() -> int:
-    """Get the model ready behind a progress bar, then bring the buddy out."""
+    """Check the API behind a progress bar, then bring the buddy out."""
     from vb.ui.splash import Splash
 
     root = tk.Tk()
@@ -133,8 +114,9 @@ def main() -> int:
             app.visible = True
             app.panel.show_result(_note(
                 "Running without a model.",
-                "Web answers will be raw page text until one is set up. "
-                "Right click me to try again."))
+                "Web answers will be raw page text until an NVIDIA API key is "
+                f"set. Put NVIDIA_API_KEY=... in {config.HOME / '.env'} and "
+                "restart me."))
 
     if llm.enabled() and config.get("skip_splash"):
         start()

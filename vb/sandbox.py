@@ -141,9 +141,16 @@ CONFIRM = [
 ]
 
 # Writes are fine in the agent's own folder and worth a question outside it.
+# Python and shell are told apart: `>` is a redirect in a shell and a
+# comparison — or the `-> str` of an annotation — in Python. Matching it in
+# Python asked for approval on every function that declared a return type and
+# mentioned a path, which is every tool the buddy writes for itself.
+PY_WRITE_HINT = re.compile(
+    r"\bopen\([^)]*['\"][wax]b?\+?['\"]|\bwrite_text\b|\bwrite_bytes\b|\bmkdir\b",
+    re.I)
 WRITE_HINT = re.compile(
-    r"\bopen\([^)]*['\"][wax]b?['\"]|>\s*\S|\bout-file\b|\bset-content\b|"
-    r"\badd-content\b|\bwrite_text\b|\bwrite_bytes\b|\bmkdir\b|\bnew-item\b", re.I)
+    PY_WRITE_HINT.pattern + r"|>\s*\S|\bout-file\b|\bset-content\b|"
+    r"\badd-content\b|\bnew-item\b", re.I)
 
 
 @dataclass
@@ -156,7 +163,8 @@ class Verdict:
         return self.action == "deny"
 
 
-def classify(command: str, *, cwd: str | None = None) -> Verdict:
+def classify(command: str, *, cwd: str | None = None,
+             python: bool = False) -> Verdict:
     """Decide what this command is allowed to do, before running any of it."""
     text = command or ""
     for pattern, why in DENY:
@@ -165,7 +173,8 @@ def classify(command: str, *, cwd: str | None = None) -> Verdict:
     for pattern, why in CONFIRM:
         if re.search(pattern, text, re.I):
             return Verdict("confirm", why)
-    if WRITE_HINT.search(text) and not _writes_only_inside(text, cwd):
+    hint = PY_WRITE_HINT if python else WRITE_HINT
+    if hint.search(text) and not _writes_only_inside(text, cwd):
         return Verdict("confirm", "writes outside its own workspace")
     return Verdict("allow")
 
@@ -294,7 +303,7 @@ def run_python(code: str, *, timeout: int = DEFAULT_TIMEOUT,
     A separate process, not exec() in ours: a script with an infinite loop or a
     segfault then costs a timeout instead of the whole app.
     """
-    verdict = classify(code)
+    verdict = classify(code, python=True)
     if verdict.blocked or (verdict.action == "confirm" and not approved):
         _log("python", code, verdict, None, 0.0)
         note = ("Refused: this " + verdict.reason + "."
@@ -312,9 +321,13 @@ def run_python(code: str, *, timeout: int = DEFAULT_TIMEOUT,
                    verdict=verdict)
 
     progress.say("Running a script…")
+    frozen = getattr(sys, "frozen", False)
+    sink = script.with_suffix(".out")
+    argv = ([sys.executable, "--py", str(script), str(sink)] if frozen
+            else [sys.executable, str(script)])
     started = time.time()
     try:
-        proc = subprocess.run([sys.executable, str(script)], capture_output=True,
+        proc = subprocess.run(argv, capture_output=True,
                               text=True, cwd=str(home), timeout=timeout,
                               encoding="utf-8", errors="replace",
                               creationflags=NO_WINDOW,
@@ -325,11 +338,19 @@ def run_python(code: str, *, timeout: int = DEFAULT_TIMEOUT,
         return Run(ok=False, output=f"Timed out after {timeout}s.",
                    verdict=verdict, seconds=took)
     finally:
-        try:
-            script.unlink()
-        except OSError:
-            pass
+        if frozen:
+            try:
+                captured = sink.read_text("utf-8", errors="replace")
+            except OSError:
+                captured = ""
+        for leftover in (script, sink):
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
     took = time.time() - started
+    if frozen:
+        proc.stdout, proc.stderr = captured, proc.stderr
     _log("python", code, verdict, proc.returncode, took)
     return Run(ok=proc.returncode == 0, output=_finish(proc),
                exit_code=proc.returncode, verdict=verdict, seconds=took)

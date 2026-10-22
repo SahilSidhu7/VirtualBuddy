@@ -23,7 +23,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from vb import config
+from vb import backends, config
 
 MAX_OBSERVATION = 2000       # what gets stored per step, not what the model saw
 
@@ -148,7 +148,7 @@ def record(outcome, system: str = "", offered: list[str] | None = None) -> bool:
         # the same file, base-model and fine-tuned runs interleave with nothing
         # to tell them apart, and the next dataset silently trains a model on
         # its own output.
-        "model": config.get("llm_model") or "",
+        "model": backends.work_model(),
         "label": "good" if (outcome.ok and outcome.answer and passed) else "bad",
         "why": "" if passed else (outcome.verdict.summary if outcome.verdict else ""),
         "steps": len(outcome.steps),

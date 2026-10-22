@@ -179,7 +179,7 @@ def run_python(code: str, *, timeout: int = 120, approved: bool = False) -> Run:
     if mode == "local":
         return sandbox.run_python(code, timeout=timeout, approved=approved)
 
-    verdict = sandbox.classify(code)
+    verdict = sandbox.classify(code, python=True)
     if verdict.blocked:
         return Run(ok=False, verdict=verdict,
                    output=f"Refused: this {verdict.reason}.")

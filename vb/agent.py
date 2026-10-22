@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
-from vb import config, loop, planner, progress, testlog
+from vb import config, forge, loop, planner, progress, testlog
 from vb.planner import Plan
 from vb.registry import Result
 from vb.router import AUTO_THRESHOLD, Match, Router
@@ -31,6 +31,10 @@ from vb.router import AUTO_THRESHOLD, Match, Router
 # gets a look instead.
 PLAN_THRESHOLD = 0.45
 STRONG_MATCH = 0.80       # above this, one skill clearly covers it
+# A tool the buddy wrote itself takes the request when it scores this well. A
+# little stricter than a built-in skill: its phrases were written by a model
+# from one example, so a near miss is likelier to be a different job.
+LEARNED_THRESHOLD = 0.55
 
 # "do X and then Y": one sentence, two jobs. The verb list has to be generous,
 # because "open browser and start applying to jobs" is two jobs and the second
@@ -122,6 +126,9 @@ class Agent:
         # the thread of one sitting, not a fact worth keeping between runs, and
         # writing it to disk would be the wrong kind of permanence.
         self.history: list[dict] = []
+        # A tool forged in the background has to become routable without a
+        # restart, or "faster next time" would mean "faster next launch".
+        forge.on_change(self.router._build)
 
     def _remember(self, prompt: str, result: "Result | None") -> None:
         """Add one completed exchange to the running history."""
@@ -157,6 +164,17 @@ class Agent:
         # runs a skill with no memory of the conversation — "delete the first
         # one" would match delete_file and then have nothing to delete.
         followup = bool(self.history) and _looks_like_followup(prompt)
+
+        # A tool the buddy wrote for exactly this job: one model call to read
+        # the arguments and one script, instead of the whole loop. It runs
+        # without asking unless it can change something.
+        top = turn.matches[0] if turn.matches else None
+        if (top and "learned" in top.skill.tags and top.score >= LEARNED_THRESHOLD
+                and not followup and not _looks_multi_step(prompt)):
+            turn.auto = not top.skill.danger
+            turn.pending = top
+            self.last = turn
+            return turn
 
         if followup or _looks_multi_step(prompt) or best_score < PLAN_THRESHOLD:
             ready, why = loop.available()
@@ -211,6 +229,16 @@ class Agent:
                               f"{type(exc).__name__}: {exc}")
         if not isinstance(out, Result):
             out = Result(text=str(out))
+        if not out.ok and "learned" in match.skill.tags and question:
+            # The quick way failed, so do it the slow way rather than hand the
+            # user an error. The failure is already counted against the tool;
+            # three of them and it is retired.
+            with progress.listening(on_progress):
+                progress.say("My shortcut did not work — working it out properly…")
+                outcome = loop.run(question, history=self.history,
+                                   max_steps=int(config.get("agent_max_steps")
+                                                 or loop.MAX_STEPS))
+            out = outcome.as_result()
         # The fast path answers most requests, and until now it recorded
         # nothing at all — so a testing session showed only the questions that
         # happened to need the model. Deliberately kept out of `traces`: the

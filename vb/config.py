@@ -14,16 +14,18 @@ DEFAULTS = {
     "avatar": "duck",          # duck | elf | crab
     "voice_input": False,      # vosk wake-word listening
     "speak": False,            # read replies aloud
-    # The model is not optional any more: without one, web answers are just
-    # scraped text. Empty means "pick the best one this machine can run", which
-    # llm.recommended_model() decides from the amount of video memory.
-    "llm_model": "",
-    "llm_model_pinned": False,   # True once the user chooses one by hand
-    "skip_splash": False,        # set once a model is known good
+    # The model lives on NVIDIA's free API (vb/provider.py). The key is read
+    # from NVIDIA_API_KEY, then ~/.virtualbuddy/.env, then this. Each tier is
+    # a list tried in order — empty means provider.py's measured defaults.
+    "nvidia_api_key": "",
+    "provider_base_url": "",
+    "work_models": [],
+    "fast_models": [],
+    "embed_model": "",
+    "skip_splash": False,        # set once the key is known good
     "browser_tier": "auto",    # auto = fall back to Playwright when HTTP fails
-    # The agent loop. Local models do the work; the Claude Code CLI is only
-    # reached for after the local one has failed twice, and only if the user
-    # already has it installed — it costs them nothing extra per call.
+    # The agent loop. The API models do the work; the Claude Code CLI is only
+    # reached for after they have failed twice, and only if opted in.
     # Off by default. This was added on the understanding that the Claude Code
     # CLI came out of a flat-rate subscription and so cost nothing per call;
     # it does not — it reports a per-token cost like any API, and it refuses
@@ -53,7 +55,7 @@ DEFAULTS = {
     "discord_token": "",
     "discord_channel": "",
     "chat_allow": [],
-    "vision_model": "",        # empty = the best one installed
+    "vision_model": "",        # empty = provider.VISION_MODEL
 }
 
 

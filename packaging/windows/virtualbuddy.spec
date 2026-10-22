@@ -27,7 +27,7 @@ a = Analysis(
     hiddenimports=[
         "vb.skills.agenda", "vb.skills.apps", "vb.skills.browsing",
         "vb.skills.claudework", "vb.claudecode",
-        "vb.skills.filework", "vb.skills.pcgraph", "vb.skills.procs",
+        "vb.skills.filework", "vb.skills.forging", "vb.skills.pcgraph", "vb.skills.procs",
         "vb.skills.seeing", "vb.skills.todo", "vb.skills.websearch",
         "vb.skills.work", "vb.projects", "vb.embed",
         "vb.planner", "vb.progress", "vb.ui.splash",
@@ -35,9 +35,23 @@ a = Analysis(
         # against the analyser missing one: an absent module here is another
         # silent loss of a whole feature rather than a build error.
         "vb.chat", "vb.executors", "vb.mcp", "vb.run_once", "vb.schedule",
-        "vb.vision",
+        "vb.vision", "vb.provider", "vb.forge",
         # The screenshot grabber, imported inside `vision.screenshot`.
         "PIL.ImageGrab", "PIL.ImageTk", "PIL._tkinter_finder",
+        # The packaged app has no python.exe: scripts the agent writes, and
+        # the tools it forges, run inside this interpreter via `--py` (see
+        # run.py). They can only import what was frozen in, so the standard
+        # library modules such scripts reach for are listed here even though
+        # nothing in VirtualBuddy itself imports them.
+        "csv", "sqlite3", "zipfile", "tarfile", "gzip", "glob", "fnmatch",
+        "statistics", "hashlib", "datetime", "calendar", "collections",
+        "itertools", "functools", "operator", "heapq", "bisect", "shutil",
+        "platform", "decimal", "fractions", "math", "random", "uuid",
+        "difflib", "textwrap", "pprint", "html", "html.parser",
+        "xml.etree.ElementTree", "urllib.request", "urllib.parse",
+        "configparser", "tomllib", "getpass", "locale", "string", "struct",
+        "base64", "mimetypes", "socket", "ssl", "email", "concurrent.futures",
+        "psutil", "send2trash", "runpy",
     ],
     hookspath=[],
     runtime_hooks=[],

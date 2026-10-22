@@ -9,3 +9,8 @@ models/
 workspace/
 .DS_Store
 build.log
+
+# The API key. A test build writes one here from a CI secret; it must never
+# be committed or reach the public installer.
+vb/_bundled_key.py
+.env

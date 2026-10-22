@@ -67,34 +67,24 @@ def _show_task(turn, agent) -> None:
         print("  " + res.detail)
 
 
-FIT_WORD = {"good": "✓", "tight": "~", "slow": "!", "no": "✕"}
-
-
 def _choose_model() -> None:
-    """Show what this machine can run, and let the user pick one."""
-    from vb import llm
-    kit = llm.hardware()
-    print(f"  {kit['summary']}\n")
-    options = llm.model_options()
-    for i, opt in enumerate(options, start=1):
-        marks = " ".join(x for x in (
-            "recommended" if opt["recommended"] else "",
-            "downloaded" if opt["installed"] else "") if x)
-        print(f"  {i}. {FIT_WORD[opt['fit']]} {opt['name']:14} "
-              f"{opt['size_gb']:.1f}GB  {opt['speed']}"
-              + (f"  [{marks}]" if marks else ""))
-        print(f"       {opt['blurb']}")
-    answer = input("\n  which one? [number, or enter to keep the recommendation] ")
+    """List what the API key can reach, and let the user put one first."""
+    from vb import provider
+    chain = provider.chain("work")
+    have = provider.models()
+    if not have:
+        print(f"  {provider.last_error() or 'Could not list models.'}")
+        return
+    chat = [m for m in have if not any(w in m for w in
+                                       ("embed", "reward", "safety", "parse", "guard"))]
+    for i, name in enumerate(chat, start=1):
+        print(f"  {i:2}. {name}" + ("   [current]" if name == chain[0] else ""))
+    answer = input("\n  which one leads the work tier? [number, enter to keep] ")
     answer = answer.strip()
-    if answer.isdigit() and 1 <= int(answer) <= len(options):
-        chosen = options[int(answer) - 1]["name"]
-    else:
-        chosen = llm.recommended_model()
-    config.set("llm_model", chosen)
-    config.set("llm_model_pinned", True)
-    print(f"  using {chosen}."
-          + ("" if llm.installed(chosen) else
-             "  Run `ollama pull " + chosen + "` to download it."))
+    if answer.isdigit() and 1 <= int(answer) <= len(chat):
+        chosen = chat[int(answer) - 1]
+        config.set("work_models", [chosen] + [m for m in chain if m != chosen])
+        print(f"  using {chosen}, falling back to {', '.join(chain[:2])}.")
 
 
 def _show(turn, agent) -> None:

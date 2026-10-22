@@ -78,6 +78,12 @@ def _param_schema(param: inspect.Parameter) -> dict:
 
 
 def _from_skill(skill) -> Tool | None:
+    if skill.schema:
+        return Tool(name=skill.name, description=skill.description,
+                    params=dict(skill.schema.get("params") or {}),
+                    required=list(skill.schema.get("required") or []),
+                    run=lambda **kwargs: skill.run(**kwargs),
+                    danger=skill.danger, tags=list(skill.tags))
     try:
         sig = inspect.signature(skill.run)
     except (TypeError, ValueError):

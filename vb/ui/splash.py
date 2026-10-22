@@ -1,9 +1,8 @@
 """The window you see while the buddy wakes up.
 
-VirtualBuddy needs a local model, and getting one ready can mean installing
-Ollama, downloading several gigabytes and loading it into the graphics card.
-That is minutes on a first run, so it happens behind a progress bar that says
-which of those things is going on, rather than a frozen sprite.
+The model lives on NVIDIA's free API, so waking up is one call to check the key
+works. When there is no key yet, this is where the user pastes one — it is
+saved to `.env` in the data folder, never into the install directory.
 
 Everything slow runs on a worker thread; Tk is only touched through `after`.
 """
@@ -12,15 +11,13 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 
-from vb import config, llm
+from vb import config, llm, provider
 from vb.ui import theme as themes
 from vb.ui.sprite import asset_root
 from vb.ui.widgets import Button, font, round_rect
 
 W, H = 430, 280
-CHOOSER_H = 430          # taller: the model list needs the room
-
-FIT_WORD = {"good": "✓", "tight": "~", "slow": "!", "no": "✕"}
+CHOOSER_H = 300
 
 
 class Splash(tk.Toplevel):
@@ -39,9 +36,9 @@ class Splash(tk.Toplevel):
                        highlightbackground=self.theme.line)
         self._centre()
 
-        # First run gets a choice. After that the answer is already stored and
-        # asking again every launch would be a nuisance rather than a courtesy.
-        if config.get("llm_model_pinned") or config.get("llm_model"):
+        # No key yet: ask for one. After that it is stored and asking again
+        # every launch would be a nuisance rather than a courtesy.
+        if provider.api_key():
             self._build()
             threading.Thread(target=self._work, daemon=True).start()
         else:
@@ -53,80 +50,51 @@ class Splash(tk.Toplevel):
         y = (self.winfo_screenheight() - height) // 2
         self.geometry(f"{W}x{height}+{x}+{y}")
 
-    # -- choosing a model -------------------------------------------------
+    # -- asking for a key -------------------------------------------------
     def _build_chooser(self):
-        """Measure the machine, then let the user pick.
-
-        The ladder's pick is pre-selected and marked, so doing nothing but
-        pressing the button is the same as letting it decide. Everything else
-        is offered with a plain word about what it will cost: a 14B on an 8GB
-        card is allowed, it is just labelled as slow rather than hidden.
-        """
         t = self.theme
         self._centre(CHOOSER_H)
         wrap = tk.Frame(self, bg=t.base)
         wrap.pack(fill="both", expand=True, padx=26, pady=22)
 
-        tk.Label(wrap, text="Which model should I use?", bg=t.base, fg=t.text,
+        tk.Label(wrap, text="Paste your NVIDIA API key", bg=t.base, fg=t.text,
                  font=font(t, 14, "bold")).pack(anchor="w")
+        tk.Label(wrap, text="Free at build.nvidia.com → Get API Key. It starts "
+                            "with nvapi- and is saved only on this PC.",
+                 bg=t.base, fg=t.text_dim, font=(t.mono, 8), wraplength=W - 60,
+                 justify="left").pack(anchor="w", pady=(2, 12))
 
-        kit = llm.hardware()
-        tk.Label(wrap, text=kit["summary"], bg=t.base, fg=t.text_dim,
-                 font=(t.mono, 8), wraplength=W - 60, justify="left"
-                 ).pack(anchor="w", pady=(2, 12))
+        self._key = tk.Entry(wrap, bg=t.base, fg=t.text, insertbackground=t.text,
+                             relief="flat", highlightthickness=1,
+                             highlightbackground=t.line, font=(t.mono, 9),
+                             show="•")
+        self._key.pack(fill="x", ipady=6)
+        self._key.focus_set()
+        self._key.bind("<Return>", lambda _e: self._accept_choice())
 
-        self._picked = tk.StringVar(value=llm.recommended_model())
-        for opt in llm.model_options():
-            self._option_row(wrap, opt)
+        self._chooser_note = tk.Label(wrap, text="", bg=t.base, fg=t.bad,
+                                      font=(t.mono, 8), wraplength=W - 60,
+                                      justify="left")
+        self._chooser_note.pack(anchor="w", pady=(8, 0))
 
-        note = tk.Label(wrap, text="", bg=t.base, fg=t.text_faint,
-                        font=(t.mono, 8), wraplength=W - 60, justify="left")
-        note.pack(anchor="w", pady=(10, 0))
-        self._chooser_note = note
-        self._describe_pick()
-
-        Button(wrap, "Set it up", self._accept_choice, t,
+        Button(wrap, "Save and start", self._accept_choice, t,
                width=W - 52, height=30, size=10).pack(pady=(12, 0))
-
-    def _option_row(self, parent, opt: dict):
-        t = self.theme
-        row = tk.Frame(parent, bg=t.base)
-        row.pack(fill="x", pady=1)
-
-        label = f"{opt['name']}"
-        if opt["recommended"]:
-            label += "  — recommended"
-        if opt["installed"]:
-            label += "  (already downloaded)"
-        colour = {"good": t.text, "tight": t.text, "slow": t.text_dim,
-                  "no": t.text_faint}[opt["fit"]]
-
-        radio = tk.Radiobutton(
-            row, text=f"{FIT_WORD[opt['fit']]}  {label}", value=opt["name"],
-            variable=self._picked, command=self._describe_pick,
-            bg=t.base, fg=colour, selectcolor=t.base, activebackground=t.base,
-            activeforeground=t.text, font=font(t, 10), anchor="w",
-            highlightthickness=0, bd=0, takefocus=False,
-            state="disabled" if opt["fit"] == "no" and not opt["installed"] else "normal")
-        radio.pack(fill="x")
-        tk.Label(row, text=f"     {opt['size_gb']:.1f}GB · {opt['speed']}",
-                 bg=t.base, fg=t.text_faint, font=(t.mono, 8), anchor="w"
-                 ).pack(fill="x")
-
-    def _describe_pick(self):
-        chosen = self._picked.get()
-        for opt in llm.model_options():
-            if opt["name"] == chosen:
-                first = ("Already downloaded — this will take a moment."
-                         if opt["installed"] else
-                         f"{opt['size_gb']:.1f}GB to download, once.")
-                self._chooser_note.configure(text=f"{first}  {opt['blurb']}")
-                return
+        Button(wrap, "Continue without it", self._skip, t,
+               width=150, height=26, size=9).pack(pady=(8, 0))
 
     def _accept_choice(self):
-        chosen = self._picked.get()
-        config.set("llm_model", chosen)
-        config.set("llm_model_pinned", True)
+        key = self._key.get().strip()
+        if not key.startswith("nvapi-"):
+            self._chooser_note.configure(text="That does not look like an "
+                                              "NVIDIA key (nvapi-…).")
+            return
+        config.HOME.mkdir(parents=True, exist_ok=True)
+        env = config.HOME / ".env"
+        lines = [line for line in (env.read_text("utf-8").splitlines()
+                                   if env.exists() else [])
+                 if not line.startswith("NVIDIA_API_KEY=")]
+        env.write_text("\n".join(lines + [f"NVIDIA_API_KEY={key}"]) + "\n",
+                       "utf-8")
         for child in self.winfo_children():
             child.destroy()
         self._centre(H)
@@ -223,42 +191,15 @@ class Splash(tk.Toplevel):
 
     # -- the work --------------------------------------------------------
     def _work(self):
-        """Get a model ready. Runs off the UI thread."""
+        """Check the API answers. Runs off the UI thread."""
         def report(percent, message="", detail=""):
             self.after(0, self.set_progress, percent, message, detail)
 
-        model = config.get("llm_model") or llm.recommended_model()
-        if not config.get("llm_model"):
-            config.set("llm_model", model)
-
-        if not llm.ollama_installed():
-            report(None, "Installing Ollama, the bit that runs the model…",
-                   "one time, a few minutes")
-            if not llm.install_ollama():
-                return self.after(0, self._failed,
-                                  "Ollama could not be installed automatically.",
-                                  "Install it from ollama.com, then restart me.")
-
-        if not llm.running():
-            report(None, "Starting Ollama…")
-            if not llm.start_server():
-                return self.after(0, self._failed, "Ollama would not start.",
-                                  "Try running “ollama serve” in a terminal.")
-
-        if not llm.installed(model):
-            report(0, f"Downloading {model}. This happens once.",
-                   "several gigabytes")
-            ok = llm.pull(model, on_progress=lambda p, s: report(
-                p, f"Downloading {model}. This happens once.", s))
-            if not ok:
-                return self.after(0, self._failed,
-                                  f"{model} could not be downloaded.",
-                                  llm.last_error() or "Check your connection.")
-
-        report(None, "Warming the model up…", f"{model} into the graphics card")
+        model = llm.recommended_model()
+        report(None, "Checking the connection…", model)
         if not llm.warm_up():
-            return self.after(0, self._failed, "The model would not answer.",
-                              llm.last_error() or "")
+            return self.after(0, self._failed, "The NVIDIA API would not answer.",
+                              llm.last_error() or "Check your key and connection.")
 
         report(100, "Ready.", model)
         self.after(450, self._finish)

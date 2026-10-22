@@ -41,6 +41,9 @@ class Skill:
     matched. When the prompt names a specific path the router demotes these, so
     the precise question reaches the agent loop that can actually answer it.
     """
+    schema: dict | None = None
+    """Explicit parameters, for skills whose function takes **kwargs — the
+    tools the buddy wrote itself (`vb.forge`). {"params": {...}, "required": [...]}"""
     triggers: list[str] = field(default_factory=list)
     """Regexes that give this skill away.
 
@@ -98,6 +101,12 @@ def load_all() -> dict[str, Skill]:
             importlib.import_module(f"{pkg.__name__}.{name}")
         except ImportError:
             continue
+    # And the tools the buddy wrote for itself, which live in the data folder.
+    try:
+        from vb import forge
+        forge.register_all(_REGISTRY)
+    except Exception:
+        pass
     return _REGISTRY
 
 

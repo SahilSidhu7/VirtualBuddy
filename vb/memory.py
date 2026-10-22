@@ -252,7 +252,7 @@ def _vector_recall(query: str, limit: int, kind: str = "") -> list[Note]:
     ~109ms the query's own embedding costs, so caching them would optimise the
     part that is already free.
     """
-    vector = embed.embed_one(query)
+    vector = embed.embed_query(query)
     if not vector:
         return []
     conn = _connect()

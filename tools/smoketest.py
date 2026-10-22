@@ -55,8 +55,34 @@ def main(argv: list[str]) -> int:
               f"missing from hiddenimports in the .spec")
         return 1
 
+    # The agent's scripts, and every tool the buddy forges, run through the
+    # exe's own `--py` mode — there is no python.exe beside it. Before that
+    # mode existed, a script relaunched the whole GUI instead of running.
+    problem = _check_scripts(exe)
+    if problem:
+        print(f"FAILED running a script through the exe: {problem}")
+        return 1
+
     print(f"smoke test passed: {exe}" + (f" ({got} skills)" if got else ""))
     return 0
+
+
+def _check_scripts(exe: Path) -> str:
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        script, out = Path(tmp) / "probe.py", Path(tmp) / "probe.out"
+        script.write_text("import csv, json, psutil, sqlite3, statistics\n"
+                          "print('py-ok', statistics.mean([1, 2, 3]))\n", "utf-8")
+        try:
+            done = subprocess.run([str(exe), "--py", str(script), str(out)],
+                                  capture_output=True, text=True, timeout=120)
+        except subprocess.TimeoutExpired:
+            return "timed out (did it open a window instead?)"
+        text = out.read_text("utf-8") if out.exists() else ""
+        if done.returncode != 0 or "py-ok 2" not in text:
+            return f"exit {done.returncode}, output {text.strip()[:300]!r}"
+    print("scripts   py-ok")
+    return ""
 
 
 def _source_skill_count() -> int:

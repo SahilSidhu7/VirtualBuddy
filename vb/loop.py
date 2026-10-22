@@ -32,7 +32,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
-from vb import (backends, config, critic, learning, memory, progress, sandbox,
+from vb import (backends, config, critic, forge, learning, memory, progress, sandbox,
                 tools, traces)
 from vb.registry import Result
 
@@ -141,7 +141,7 @@ def _needs_approval(tool: tools.Tool, args: dict) -> str:
     """The reason this call has to be asked about, or '' when it does not."""
     if tool.name in ("run_shell", "run_python"):
         text = args.get("command") or args.get("code") or ""
-        verdict = sandbox.classify(text)
+        verdict = sandbox.classify(text, python=tool.name == "run_python")
         if verdict.action == "deny":
             return f"REFUSED: {verdict.reason}"
         if verdict.action == "confirm":
@@ -390,14 +390,19 @@ def run(request: str, *, approve: ApprovalFn | None = None,
             if not outcome.steps and not refused_bare_finish:
                 refused_bare_finish = True
                 bad_turns += 1
+                # The push-back goes in as the call's result, not a separate
+                # user turn: an OpenAI endpoint rejects a transcript where a
+                # tool call has no matching result.
                 messages.append({"role": "assistant", "content": reply.content,
-                                 "tool_calls": [{"function": {
+                                 "tool_calls": [{"id": call.id, "function": {
                                      "name": call.name, "arguments": call.args}}]})
-                messages.append({"role": "user", "content":
-                                 "You have not run anything yet, so that answer "
-                                 "is a guess. Use a tool to find out, then call "
-                                 "finish with what it actually returned. If the "
-                                 "question truly needs no tool, call finish again."})
+                messages.append({"role": "tool", "name": call.name,
+                                 "tool_call_id": call.id, "content":
+                                 "Not accepted. You have not run anything yet, so "
+                                 "that answer is a guess. Use a tool to find out, "
+                                 "then call finish with what it actually returned. "
+                                 "If the question truly needs no tool, call "
+                                 "finish again."})
                 # The signature is dropped so the retry may legitimately call
                 # finish again — the repeat-call guard above would otherwise
                 # treat insisting as circling.
@@ -414,15 +419,14 @@ def run(request: str, *, approve: ApprovalFn | None = None,
             tier, outcome.escalated = "hard", True
             progress.say("That is not working — asking a stronger model…")
 
-        # `arguments` goes back as an object, not a JSON string. Ollama parses
-        # the transcript it is given and rejects the whole request with
-        # "Value looks like object, but can't find closing '}' symbol" when a
-        # string turns up where it expects a map.
+        # Kept as a dict here; `provider.to_openai` serialises the arguments
+        # and pairs each call with its result by id on the way out.
         messages.append({"role": "assistant", "content": reply.content,
-                         "tool_calls": [{"function": {"name": call.name,
+                         "tool_calls": [{"id": call.id,
+                                         "function": {"name": call.name,
                                                       "arguments": call.args}}]})
         messages.append({"role": "tool", "name": call.name,
-                         "tool_name": call.name, "content": step.output})
+                         "tool_call_id": call.id, "content": step.output})
 
         # A critic pass mid-run, but only at the point where a run has usually
         # either gone wrong or is nearly done. Running it every step would
@@ -497,6 +501,7 @@ def _after(outcome: Outcome, system: str, offered: list[str]) -> None:
                 lambda: traces.record(outcome, system=system, offered=offered),
                 lambda: testlog.record_outcome(outcome),
                 lambda: _maybe_learn(outcome),
+                lambda: forge.forge_later(outcome),
                 memory.maybe_consolidate):
         try:
             job()

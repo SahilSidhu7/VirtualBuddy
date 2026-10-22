@@ -11,6 +11,7 @@ MODULES = (
     "browsing",
     "claudework",
     "filework",
+    "forging",
     "pcgraph",
     "procs",
     "seeing",

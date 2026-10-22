@@ -7,6 +7,8 @@
     python run.py --testlog    write what you asked and what it said to a file
                                (add "bad" for the failures only)
     python run.py --selftest   load everything, print a report, exit
+    VirtualBuddy.exe --py script.py out.txt
+                               run a script (the packaged app has no python.exe)
 
 --selftest is what CI runs against the packaged .exe: it exercises the parts a
 frozen build usually breaks (skill discovery, sprite paths, the vectoriser)
@@ -75,7 +77,32 @@ def selftest() -> int:
     return 1 if problems else 0
 
 
+def run_script(script: str, out: str) -> int:
+    """Run one Python file with this interpreter, output to a file.
+
+    The packaged app has no python.exe, so `sys.executable` is VirtualBuddy.exe
+    itself — and the agent's `run_python` launched a second buddy window
+    instead of the script. This is what it launches instead. Output goes to a
+    file because a windowed build has no usable stdout to capture.
+    """
+    import runpy
+    import traceback
+    with open(out, "w", encoding="utf-8", errors="replace") as sink:
+        sys.stdout = sys.stderr = sink
+        sys.argv = [script]
+        try:
+            runpy.run_path(script, run_name="__main__")
+        except SystemExit as exc:
+            return exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+        except BaseException:
+            traceback.print_exc()
+            return 1
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) >= 4 and sys.argv[1] == "--py":
+        raise SystemExit(run_script(sys.argv[2], sys.argv[3]))
     if "--selftest" in sys.argv:
         raise SystemExit(selftest())
     # What a scheduled task runs in a frozen build. Without this branch the

@@ -33,7 +33,7 @@ import json
 import time
 from pathlib import Path
 
-from vb import config, traces
+from vb import backends, config, traces
 
 # Per step, in the report. Enough to see what ran and what came back, short
 # enough that fifty of them stay readable.
@@ -69,7 +69,7 @@ def _base(question: str, route: str) -> dict:
     return {
         "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "source": traces.source(),
-        "model": config.get("llm_model") or "",
+        "model": backends.work_model(),
         "question": question,
         # "skill" when the router answered it outright, "agent" when the model
         # worked through it in steps. Which one handled a request is usually
