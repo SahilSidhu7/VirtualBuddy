@@ -207,7 +207,20 @@
                 "dig into the news about the election", "compare the best keyboards",
                 "brief me on the housing market", "find out everything about rust"],
       triggers: [/\bresearch\b/, /\bdig into\b/, /\bbrief me\b/, /\bcompare\b/],
-      out: (q) => `Research: ${q}\n\n- Four sources read, two agreed on price bands\n- Consensus: mid-range wins on value below the flagship tier\n- One outlier review disputes the panel quality claim\n\nSources:\n- rtings.com\n- tomshardware.com\n- reddit.com/r/monitors\n- displayninja.com` },
+      out: (q) => `Research: ${q}\n\nMid-range models win on value below the flagship tier [1][3]; one review disputes the panel quality claim [4].\n\n- Price bands agree across three sources [1][2][3]\n- The sources do not cover long-term reliability\n\nSources:\n[1] rtings.com\n[2] tomshardware.com\n[3] reddit.com/r/monitors\n[4] displayninja.com` },
+
+    { name: "forge_tool", args: "task",
+      phrases: ["make a tool that counts lines of code", "build yourself a tool to rename photos",
+                "create a skill that checks my battery", "learn how to find duplicate files",
+                "teach yourself to summarise my downloads"],
+      triggers: [/\b(make|build|create|write)\b.*\b(tool|skill)\b/, /\b(learn how to|teach yourself)\b/],
+      out: () => `Worked it out the long way first (11.6s)...\n\nNew tool: count_python_lines(directory)\nTested on your question: same answer as the long way.\nNext time this is one quick step.` },
+
+    { name: "list_learned_tools", args: "",
+      phrases: ["what tools have you made", "list your learned tools", "show your tools",
+                "what have you learned"],
+      triggers: [/\b(tools|skills)\b.*\b(made|built|learned)\b/],
+      out: () => `3 tools I made:\n- count_python_lines — lines of code in a folder (used 12x)\n- folder_size_kb — total size of a folder (used 4x)\n- largest_files — the N biggest files under a path (used 2x)` },
 
     { name: "web_search", args: "query",
       phrases: ["search the web for cheap flights", "google the weather in delhi",

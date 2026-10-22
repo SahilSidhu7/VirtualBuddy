@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VirtualBuddy — a small assistant that lives on your desktop</title>
-<meta name="description" content="A pixel companion that searches and scrapes the web, indexes your PC into a graph, edits your files and manages your tasks. Free, offline, no API keys.">
+<meta name="description" content="A pixel companion that works on your PC, researches the web with cited sources, and writes itself new tools as you use it. Free, on NVIDIA's free API, no graphics card needed.">
 <meta property="og:title" content="VirtualBuddy">
-<meta property="og:description" content="A small assistant that lives on your desktop. Researches the web, knows where your files are, runs your errands. Free and offline.">
+<meta property="og:description" content="A small assistant that lives on your desktop. Works on your PC, researches the web, and gets faster at the things you ask for. Free.">
 <meta property="og:type" content="website">
 <link rel="icon" href="img/character/duck/idle_0.png">
 <link rel="stylesheet" href="style.css">
@@ -36,15 +36,15 @@
   <div class="shell">
     <div>
       <h1>A small assistant that <em>lives on your desktop</em>.</h1>
-      <p class="lede">It researches the web, knows where every one of your files is, edits them, and tells you what is eating your CPU. Free, offline, no API keys.</p>
+      <p class="lede">It works on your PC, researches the web with cited sources, and answers your questions. And it grows: the first time you ask for something new it works it out, then writes itself a tool, so the next time is instant.</p>
       <div class="cta">
         <a class="btn primary" href="https://github.com/SahilSidhu7/VirtualBuddy/releases/latest/download/VirtualBuddy-Setup.exe">Download for Windows</a>
         <a class="btn" href="#demo">Try the router below</a>
       </div>
       <div class="stat-strip">
-        <div class="stat"><b>26</b><span>skills, no cloud</span></div>
-        <div class="stat"><b>2.7s</b><span>to index 48,000 files</span></div>
-        <div class="stat"><b>$0</b><span>forever, no account</span></div>
+        <div class="stat"><b>42</b><span>skills, and it makes more</span></div>
+        <div class="stat"><b>0.7s</b><span>the second time you ask</span></div>
+        <div class="stat"><b>$0</b><span>free NVIDIA key, no GPU</span></div>
       </div>
     </div>
     <div class="stage">
@@ -60,12 +60,12 @@
     <span>read this link</span><span>add a line to notes.txt</span><span>what's using my cpu</span>
     <span>remind me to call the dentist</span><span>what did i work on today</span>
     <span>open chrome</span><span>what's in my downloads</span><span>index my pc</span>
-    <span>check my battery</span>
+    <span>check my battery</span><span>make a tool that renames my photos</span>
     <span>research a topic</span><span>find my tax pdf</span><span>what's eating my disk space</span>
     <span>read this link</span><span>add a line to notes.txt</span><span>what's using my cpu</span>
     <span>remind me to call the dentist</span><span>what did i work on today</span>
     <span>open chrome</span><span>what's in my downloads</span><span>index my pc</span>
-    <span>check my battery</span>
+    <span>check my battery</span><span>make a tool that renames my photos</span>
   </div>
 </div>
 
@@ -82,6 +82,7 @@
           <button>why is my pc slow</button>
           <button>remind me to call the dentist tomorrow</button>
           <button>add a line to notes.txt saying call mum</button>
+          <button>make a tool that counts lines of code</button>
         </div>
         <p class="faint" style="margin-top:1.4rem; font-size:.86rem">Results are samples. The matching is the real thing.</p>
       </div>
@@ -109,11 +110,11 @@
 
 <section id="does">
   <div class="shell">
-    <h2 class="reveal">Four things it is actually good at.</h2>
+    <h2 class="reveal">Five things it is actually good at.</h2>
     <div class="bento">
       <div class="cell wide lit reveal">
         <h3>It reads the web for you</h3>
-        <p>Search, scrape and research across several sites at once. Plain HTTP first because it is fast, and a real Chromium only when a page is JavaScript-only or wants clicking. No keys, no quota, nothing to sign up for.</p>
+        <p>It turns a topic into several searches, reads up to six pages at once, and writes an answer where every claim carries a numbered citation you can check. Plain HTTP first because it is fast, and a real Chromium only when a page is JavaScript-only or wants clicking.</p>
         <ul>
           <li>research the best budget monitors</li>
           <li>summarise this link</li>
@@ -123,6 +124,19 @@
       <div class="cell narrow reveal">
         <div class="big">2.7s</div>
         <p style="margin-top:.7rem">to walk 48,787 files into a graph of folders and files. Ask it anything about your own machine afterwards.</p>
+      </div>
+      <div class="cell wide reveal">
+        <h3>It grows as you use it</h3>
+        <p>Ask for something it has no skill for and it works it out the long way, writing and running code as it goes. Then it turns that work into a tool of its own, runs the tool on the same question, and keeps it only if it gives the same answer. Next time, a request like that skips straight to the tool. A tool that keeps failing is retired.</p>
+        <ul>
+          <li>make a tool that counts lines of code in a folder</li>
+          <li>what tools have you made</li>
+          <li>forget the tool count_python_lines</li>
+        </ul>
+      </div>
+      <div class="cell narrow reveal">
+        <div class="big">11.6s → 0.7s</div>
+        <p style="margin-top:.7rem">the same kind of question, the first time and the second. Measured on a request it had never seen before.</p>
       </div>
       <div class="cell half reveal">
         <h3>It knows your PC</h3>
@@ -148,7 +162,7 @@
 
 <section>
   <div class="shell">
-    <h2 class="reveal">Nothing leaves your machine.</h2>
+    <h2 class="reveal">How a request runs.</h2>
     <div class="steps reveal">
       <div class="step">
         <span class="k">you type it</span>
@@ -172,7 +186,7 @@
       <div class="step">
         <span class="k">one question</span>
         <b>It answers</b>
-        <p>Not a wall of scraped page. Four sources, read and turned into six bullets with the site named next to each claim.</p>
+        <p>Not a wall of scraped page. Six sources, read in parallel and turned into a short answer with a numbered citation on every claim.</p>
       </div>
       <div class="step">
         <span class="k">two verbs</span>
@@ -197,7 +211,7 @@
           <a class="btn primary big" href="https://github.com/SahilSidhu7/VirtualBuddy/releases/latest/download/VirtualBuddy-Setup.exe">Download for Windows</a>
           <a class="btn" href="https://github.com/SahilSidhu7/VirtualBuddy/releases/latest/download/VirtualBuddy-portable.zip">Portable zip</a>
         </div>
-        <p class="faint" style="margin-top:.9rem; font-size:.88rem">29MB installer. No admin rights needed, and the setup asks whether you want it to start when you sign in. On first run it sets up the model, which is a few gigabytes and happens once.</p>
+        <p class="faint" style="margin-top:.9rem; font-size:.88rem">29MB installer. No admin rights needed, and the setup asks whether you want it to start when you sign in. On first run it asks for a free API key from <a href="https://build.nvidia.com" class="accent">build.nvidia.com</a>: paste it once and it is saved on your PC only. Nothing to download, no graphics card needed.</p>
         <p class="dim" style="margin-top:1.4rem">Your buddy appears in the bottom right of the screen. Click it to open the panel, drag it wherever you like, right click it for settings.</p>
 
         <p class="dim" style="margin-top:2.2rem; font-weight:600; color:var(--text)">Or run it from source, on any OS</p>
@@ -211,7 +225,8 @@
       <div>
         <div class="note reveal"><b>It shows its work.</b> Reading four sources takes a few seconds, so it tells you which one it is on and how long it has been going. No spinner that could mean anything.</div>
         <div class="note reveal"><b>The browser tier is lazy.</b> Chromium is only downloaded the first time a page genuinely needs it, so a plain install stays small.</div>
-        <div class="note reveal"><b>Your data stays put.</b> The file index, your settings and your to-do list live in <code class="mono">~/.virtualbuddy</code>, in formats you can open yourself. Uninstalling leaves them alone.</div>
+        <div class="note reveal"><b>Your data stays put.</b> The file index, your settings, your to-do list and the tools it writes for itself live in <code class="mono">~/.virtualbuddy</code>, in formats you can open yourself. Uninstalling leaves them alone.</div>
+        <div class="note reveal"><b>What goes to NVIDIA.</b> Your questions, and what the buddy needs to answer them, are sent to NVIDIA's API. Your files are read and run on your own PC, and a screenshot is only sent when you ask it to look at your screen.</div>
         <div class="note reveal"><b>Starts with Windows, if you want.</b> Tick the box during setup, or turn it on and off any time by right clicking your buddy. It is a shortcut in your Startup folder, nothing hidden in the registry.</div>
       </div>
     </div>
